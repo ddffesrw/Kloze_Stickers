@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  iOS Info.plist için eklenmesi gerekenler
+  Mevcut Info.plist dosyasına bu kısmı ekleyin
+-->
+<plist version="1.0">
+<dict>
+    <!-- WhatsApp URL Scheme Query -->
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+        <string>whatsapp</string>
+    </array>
+
+    <!-- Optional: Custom URL Scheme (dönüş için) -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLName</key>
+            <string>app.lovable.kloze</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>kloze</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

@@ -1,0 +1,44 @@
+import { supabase } from '@/lib/supabase';
+
+/**
+ * Add Credits to User (Admin Only)
+ */
+export async function adminAddCredits(userId: string, amount: number) {
+    const { data, error } = await supabase.rpc('admin_add_credits', {
+        target_user_id: userId,
+        amount: amount
+    });
+
+    if (error) {
+        console.error("Admin add credits error:", error);
+        throw error;
+    }
+    return data;
+}
+
+/**
+ * Toggle Pro Status (Admin Only)
+ */
+export async function adminTogglePro(userId: string, status: boolean) {
+    const { data, error } = await supabase.rpc('admin_toggle_pro', {
+        target_user_id: userId,
+        status: status
+    });
+
+    if (error) {
+        console.error("Admin toggle pro error:", error);
+        throw error;
+    }
+    return data;
+}
+
+/**
+ * Get All Users (Admin View)
+ * Replacing mock data usage
+ */
+export async function adminGetAllUsers() {
+    const { data, error } = await supabase.rpc('admin_get_all_users');
+
+    if (error) throw error;
+    return data;
+}
