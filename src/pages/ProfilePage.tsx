@@ -2,13 +2,19 @@ import { useState, useEffect } from "react";
 import { useUserCredits } from "@/hooks/useUserCredits";
 import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { Settings, ChevronRight, Crown, LogOut, Bell, Palette, Shield, HelpCircle, Coins, Star, Zap, Gift, Camera, Trash2, Package, Edit, MessageCircle, Share2 } from "lucide-react";
+import { Settings, ChevronRight, Crown, LogOut, Bell, Palette, Shield, HelpCircle, Coins, Star, Zap, Gift, Camera, Trash2, Package, Edit, MessageCircle, Share2, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AvatarSelector } from "@/components/kloze/AvatarSelector";
 import { auth } from "@/lib/supabase";
 import defaultAvatar from "@/assets/avatars/male-1.png";
-import { getAllUserStickers, deleteSticker, getUserPacks, getUserStats, type Sticker, type StickerPack } from "@/services/stickerService";
+import { getAllUserStickers, deleteSticker, getUserPacks, getUserStats, deletePack, type Sticker, type StickerPack } from "@/services/stickerService";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { downloadWhatsAppPack } from "@/services/whatsappService";
 import { toast } from "sonner";
 import { AdBanner } from "@/components/kloze/AdBanner";
@@ -125,6 +131,17 @@ export default function ProfilePage() {
       toast.success("Sticker silindi.");
     } catch (error) {
       toast.error("Silme işlemi başarısız.");
+    }
+  };
+
+  const handleDeletePack = async (packId: string) => {
+    if (!confirm("Bu paketi silmek istediğine emin misin?")) return;
+    try {
+      await deletePack(packId);
+      setPacks(prev => prev.filter(p => p.id !== packId));
+      toast.success("Paket silindi");
+    } catch (e) {
+      toast.error("Paket silinemedi");
     }
   };
 
@@ -322,54 +339,42 @@ export default function ProfilePage() {
               {packs.map(pack => (
                 <div key={pack.id} className="flex-shrink-0 w-32 group relative">
                   <div className="aspect-square rounded-2xl glass-card border border-border/30 p-2 overflow-hidden relative">
-                    {/* Background Link - using absolute positioning to cover card but allow buttons on top */}
+                    {/* Background Link */}
                     <Link to={`/pack/${pack.id}`} className="absolute inset-0 z-0" />
 
-                    {pack.tray_image_url ? (
-                      <img
-                        src={pack.tray_image_url}
-                        className="w-full h-full object-contain relative z-0 pointer-events-none" // pointer-events-none allows clicks to pass to Link if needed, but z-0 below Link z-0 is same context
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-secondary/10 relative z-0">
-                        <Package className="w-8 h-8 text-secondary" />
-                      </div>
-                    )}
+                    {/* Image with Fallback */}
+                    <img
+                      src={pack.tray_image_url || pack.stickers?.[0]?.image_url || "/placeholder.png"}
+                      className="w-full h-full object-contain relative z-0 pointer-events-none"
+                      loading="lazy"
+                    />
 
-                    {/* Quick Actions Overlay - Z Index Higher than Link */}
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 z-10 pointer-events-none">
-                      {/* Pointer events auto for buttons to be clickable */}
-                      <div className="flex gap-1 pointer-events-auto">
-                        <div
-                          className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors cursor-pointer"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            downloadWhatsAppPack(pack, pack.stickers || []);
-                            toast.success("WhatsApp'a aktarılıyor...");
-                          }}
-                          className="p-1.5 rounded-full bg-green-500/80 hover:bg-green-500 text-white transition-colors"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          navigator.clipboard.writeText(`${window.location.origin}/pack/${pack.id}`);
-                          toast.success("Link kopyalandı!");
-                        }}
-                        className="text-[10px] text-white/80 hover:text-white flex items-center gap-1 pointer-events-auto"
-                      >
-                        <Share2 className="w-3 h-3" />
-                        Paylaş
-                      </button>
+                    {/* Mobile Friendly Menu (3 Dots) */}
+                    <div className="absolute top-1 right-1 z-20">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <div className="h-6 w-6 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center cursor-pointer hover:bg-black/60 transition-colors">
+                            <MoreVertical className="w-3.5 h-3.5 text-white" />
+                          </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40 z-50 bg-background/95 backdrop-blur-xl border-border/50">
+                          <DropdownMenuItem onClick={() => downloadWhatsAppPack(pack, pack.stickers || [])}>
+                            <MessageCircle className="w-4 h-4 mr-2 text-green-500" />
+                            <span>WhatsApp</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/pack/${pack.id}`);
+                            toast.success("Link kopyalandı!");
+                          }}>
+                            <Share2 className="w-4 h-4 mr-2" />
+                            <span>Paylaş</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDeletePack(pack.id)}>
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            <span>Sil</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                   <p className="mt-2 text-xs font-bold text-center truncate">{pack.title}</p>
