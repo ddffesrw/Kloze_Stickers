@@ -251,7 +251,10 @@ export default function AdminPage() {
           </TabsList>
 
           <TabsContent value="overview">
-            <div className="text-center py-10 text-muted-foreground">Genel bakış grafikleri buraya gelecek...</div>
+            <div className="text-center py-20">
+              <h1 className="text-4xl font-black text-green-500 animate-bounce">BAŞARILI YÜKLEME</h1>
+              <p className="text-muted-foreground mt-4">Sistem versiyonu: v1.1</p>
+            </div>
           </TabsContent>
 
           <TabsContent value="users" className="space-y-4">
