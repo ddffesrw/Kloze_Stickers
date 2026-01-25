@@ -1,61 +1,63 @@
-import { GeneratedSticker, GenerateStickerOptions } from './runwareService';
+
+import { HfInference } from "@huggingface/inference";
+import imglyRemoveBackground from "@imgly/background-removal";
+import { supabase } from "@/lib/supabase";
+
+// Initialize client
+const hf = new HfInference(import.meta.env.VITE_HUGGING_FACE_TOKEN);
 
 /**
- * Hugging Face API Service
- * black-forest-labs/FLUX.1-schnell modelini kullanır.
+ * Generate Sticker using FLUX.1-Schnell (Fast & Good Quality)
  */
-
-const HF_API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell";
-
-export async function generateStickerHF(
-    options: GenerateStickerOptions
-): Promise<GeneratedSticker> {
-    const apiKey = import.meta.env.VITE_HUGGING_FACE_TOKEN;
-    if (!apiKey) throw new Error('VITE_HUGGING_FACE_TOKEN bulunamadı');
-
-    // Sticker prompt optimizasyonu (Runware ile aynı mantık)
-    const optimizedPrompt = `${options.prompt}, die-cut sticker, professional vector illustration, thick white border, solid flat white background, isolated on white background, high quality, 8k, clean edges, sticker style, vibrant colors, simple composition`;
-
-    console.log('[HF] Generating with prompt:', optimizedPrompt);
-
+export async function generateStickerWithHF(prompt: string, userId: string): Promise<{ success: boolean, imageUrl?: string, error?: string }> {
     try {
-        const response = await fetch(HF_API_URL, {
-            headers: {
-                Authorization: `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-            },
-            method: "POST",
-            body: JSON.stringify({
-                inputs: optimizedPrompt,
-                parameters: {
-                    width: options.width || 512,
-                    height: options.height || 512,
-                    // Flux specific (bazı parametreler HF inference API'de farklı olabilir ama genelde interference API bunları yoksayar veya uygun olanı alır)
-                }
-            }),
+        console.log("Generating with Hugging Face...", prompt);
+
+        // 1. Call HF API
+        const blob = await hf.textToImage({
+            model: "black-forest-labs/FLUX.1-schnell",
+            inputs: `sticker style, solitary, white background, vector art, ${prompt}`,
+            parameters: {
+                // @ts-ignore - FLUX specific params might not be fully typed in SDK yet
+                num_inference_steps: 4, // Schnell is fast
+                guidance_scale: 0.0 // Schnell often uses 0 or low guidance, forcing defaults
+            }
         });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('[HF] Error Response:', errorText);
-            throw new Error(`HF API Hatası: ${response.status} ${response.statusText}`);
-        }
+        // 2. Remove Background
+        console.log("Removing background...");
+        // Convert Blob to URL for mgly
+        const tempUrl = URL.createObjectURL(blob);
+        const processedBlob = await imglyRemoveBackground(tempUrl);
 
-        const blob = await response.blob();
-        const imageURL = URL.createObjectURL(blob);
-        const seed = Math.floor(Math.random() * 1000000); // HF seed dönmezse rastgele
+        // 3. Upload to Supabase
+        const fileName = `${userId}/${Date.now()}_hf.webp`;
+        const { error: uploadError } = await supabase.storage
+            .from('stickers')
+            .upload(fileName, processedBlob, { contentType: 'image/webp' });
 
-        console.log('[HF] Success, Blob created:', imageURL);
+        if (uploadError) throw uploadError;
 
-        return {
-            imageURL,
-            seed,
-            width: options.width || 512,
-            height: options.height || 512
-        };
+        const { data: { publicUrl } } = supabase.storage
+            .from('stickers')
+            .getPublicUrl(fileName);
 
-    } catch (error) {
-        console.error('[HF] Error:', error);
-        throw new Error('Ücretsiz üretim sırasında hata oluştu. Lütfen tekrar deneyin.');
+        // 4. Create DB Record (Auto-add to "Drafts")
+        const { error: dbError } = await supabase
+            .from('user_stickers')
+            .insert({
+                user_id: userId,
+                image_url: publicUrl,
+                prompt: prompt + " (HF)",
+                pack_id: null // Draft
+            });
+
+        if (dbError) throw dbError;
+
+        return { success: true, imageUrl: publicUrl };
+
+    } catch (error: any) {
+        console.error("HF Generation Failed:", error);
+        return { success: false, error: error.message || "Generation failed" };
     }
 }
