@@ -6,7 +6,8 @@ import { supabase } from '@/lib/supabase';
 export async function adminAddCredits(userId: string, amount: number) {
     const { data, error } = await supabase.rpc('admin_add_credits', {
         target_user_id: userId,
-        amount: amount
+        amount_to_add: amount,
+        update_reason: 'Admin Panel Gift'
     });
 
     if (error) {
