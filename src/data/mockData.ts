@@ -193,18 +193,20 @@ export const currentUser: User = {
 };
 
 export const aiStyles = [
-  { id: "3d", name: "3D Render", icon: "🎲", description: "Gerçekçi 3D görünüm" },
-  { id: "anime", name: "Anime", icon: "🌸", description: "Japon çizgi film tarzı" },
-  { id: "minimalist", name: "Minimalist", icon: "◯", description: "Sade ve şık" },
-  { id: "vector", name: "Vector", icon: "✏️", description: "Düz renkli illüstrasyon" },
-  { id: "kawaii", name: "Kawaii", icon: "🧸", description: "Sevimli Japon stili" },
-  { id: "pixel", name: "Pixel Art", icon: "🕹️", description: "Retro oyun grafikleri" },
-  { id: "watercolor", name: "Sulu Boya", icon: "🎨", description: "Sanatsal ve yumuşak" },
-  { id: "neon", name: "Neon", icon: "💡", description: "Parlak cyberpunk" },
-  { id: "cartoon", name: "Cartoon", icon: "🎬", description: "Çizgi film karakteri" },
-  { id: "sketch", name: "Sketch", icon: "✍️", description: "El çizimi görünümü" },
-  { id: "cyberpunk", name: "Cyberpunk", icon: "🤖", description: "Futuristik teknoloji" },
-  { id: "pop-art", name: "Pop Art", icon: "🖼️", description: "Renkli ve cesur" },
+  { id: "3d", name: "3D Render", icon: "🎲", description: "Gerçekçi 3D görünüm", prompt: "3D rendered, photorealistic" },
+  { id: "anime", name: "Anime", icon: "🌸", description: "Japon çizgi film tarzı", prompt: "anime style, manga art" },
+  { id: "minimalist", name: "Minimalist", icon: "◯", description: "Sade ve şık", prompt: "minimalist, simple, clean design" },
+  { id: "vector", name: "Vector", icon: "✏️", description: "Düz renkli illüstrasyon", prompt: "vector art, flat colors" },
+  { id: "kawaii", name: "Kawaii", icon: "🧸", description: "Sevimli Japon stili", prompt: "kawaii, cute, adorable" },
+  { id: "pixel", name: "Pixel Art", icon: "🕹️", description: "Retro oyun grafikleri", prompt: "pixel art, 8-bit, retro game" },
+  { id: "watercolor", name: "Sulu Boya", icon: "🎨", description: "Sanatsal ve yumuşak", prompt: "watercolor painting, artistic" },
+  { id: "neon", name: "Neon", icon: "💡", description: "Parlak cyberpunk", prompt: "neon lights, glowing, vibrant colors" },
+  { id: "cartoon", name: "Cartoon", icon: "🎬", description: "Çizgi film karakteri", prompt: "cartoon style, animated" },
+  { id: "sketch", name: "Sketch", icon: "✍️", description: "El çizimi görünümü", prompt: "hand drawn sketch, pencil art" },
+  { id: "tribal", name: "Tribal", icon: "🗿", description: "Etnik desenler", prompt: "tribal art, ethnic patterns, indigenous" },
+  { id: "illusion", name: "Illusion", icon: "👁️", description: "Optik illüzyon", prompt: "optical illusion, trippy, mind-bending" },
+  { id: "psychedelic", name: "Psychedelic", icon: "🍄", description: "Renkli halüsinasyon", prompt: "psychedelic, hallucinogenic, colorful swirls" },
+  { id: "pop-art", name: "Pop Art", icon: "🖼️", description: "Renkli ve cesur", prompt: "pop art, bold colors, comic style" },
 ];
 
 export const adminStats = {
