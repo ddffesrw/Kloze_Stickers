@@ -56,6 +56,7 @@ export default function AdminPage() {
 
   // Pack Management State
   const [packs, setPacks] = useState<any[]>([]);
+  const [packSearchQuery, setPackSearchQuery] = useState("");
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editPackId, setEditPackId] = useState<string>("");
   const [editPackTitle, setEditPackTitle] = useState("");
@@ -205,6 +206,10 @@ export default function AdminPage() {
     (u.name || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const filteredPacks = packs.filter(p =>
+    (p.title || p.name || "").toLowerCase().includes(packSearchQuery.toLowerCase())
+  );
+
   return (
     <div className="min-h-screen bg-background pb-10">
       {/* Header */}
@@ -216,10 +221,7 @@ export default function AdminPage() {
         <span className="text-xs bg-red-500/10 text-red-500 px-2 py-1 rounded-full font-mono">SUPREME POWER</span>
       </header>
 
-      {/* Deployment Canary */}
-      <div className="bg-green-500 text-white text-center py-2 font-bold animate-pulse">
-        🚀 YÜKLEME BAŞARILI V1.0 - TEST MODU
-      </div>
+
 
       <main className="p-4 space-y-6">
         {/* Stats Grid */}
@@ -250,10 +252,111 @@ export default function AdminPage() {
             <TabsTrigger value="upload">Yükle</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview">
-            <div className="text-center py-20">
-              <h1 className="text-4xl font-black text-green-500 animate-bounce">BAŞARILI YÜKLEME</h1>
-              <p className="text-muted-foreground mt-4">Sistem versiyonu: v1.1</p>
+          <TabsContent value="overview" className="space-y-4">
+            {/* Quick Stats Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="glass-card p-4 rounded-xl border border-purple-500/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground">Bugün</span>
+                  <Activity className="w-4 h-4 text-purple-500" />
+                </div>
+                <div className="text-2xl font-black text-purple-500">
+                  {users.filter(u => {
+                    const created = new Date(u.created_at);
+                    const today = new Date();
+                    return created.toDateString() === today.toDateString();
+                  }).length}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Yeni Üye</div>
+              </div>
+
+              <div className="glass-card p-4 rounded-xl border border-blue-500/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground">Toplam</span>
+                  <Sparkles className="w-4 h-4 text-blue-500" />
+                </div>
+                <div className="text-2xl font-black text-blue-500">
+                  {adminStatsData.totalStickers}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Sticker</div>
+              </div>
+
+              <div className="glass-card p-4 rounded-xl border border-amber-500/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground">PRO</span>
+                  <Crown className="w-4 h-4 text-amber-500" />
+                </div>
+                <div className="text-2xl font-black text-amber-500">
+                  {users.filter(u => u.is_pro).length}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Üye</div>
+              </div>
+
+              <div className="glass-card p-4 rounded-xl border border-green-500/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground">Ortalama</span>
+                  <Coins className="w-4 h-4 text-green-500" />
+                </div>
+                <div className="text-2xl font-black text-green-500">
+                  {users.length > 0 ? Math.round(users.reduce((sum, u) => sum + (u.credits || 0), 0) / users.length) : 0}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Kredi/Kişi</div>
+              </div>
+            </div>
+
+            {/* Recent Users & Popular Packs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Recent Users */}
+              <div className="glass-card rounded-xl border border-border/20 p-4">
+                <h3 className="font-bold mb-3 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary" />
+                  Son Kayıtlar
+                </h3>
+                <div className="space-y-2">
+                  {users.slice(0, 5).map(u => (
+                    <div key={u.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center text-xs font-bold">
+                        {u.email?.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold truncate">{u.name || "İsimsiz"}</div>
+                        <div className="text-[10px] text-muted-foreground truncate">{u.email}</div>
+                      </div>
+                      {u.is_pro && <Crown className="w-3 h-3 text-amber-500" />}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Popular Packs */}
+              <div className="glass-card rounded-xl border border-border/20 p-4">
+                <h3 className="font-bold mb-3 flex items-center gap-2">
+                  <Package className="w-4 h-4 text-secondary" />
+                  Popüler Paketler
+                </h3>
+                <div className="space-y-2">
+                  {packs
+                    .sort((a, b) => (b.downloads || 0) - (a.downloads || 0))
+                    .slice(0, 5)
+                    .map(p => (
+                      <div key={p.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50">
+                        <img
+                          src={p.tray_image_url || p.stickers?.[0]?.image_url || "/placeholder.png"}
+                          className="w-8 h-8 rounded-md object-cover"
+                          alt=""
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold truncate">{p.title || p.name}</div>
+                          <div className="text-[10px] text-muted-foreground">{p.downloads || 0} indirme</div>
+                        </div>
+                        {p.is_premium && <Crown className="w-3 h-3 text-amber-400" />}
+                      </div>
+                    ))}
+                  {packs.length === 0 && (
+                    <div className="text-center text-xs text-muted-foreground py-4">Henüz paket yok</div>
+                  )}
+                </div>
+              </div>
             </div>
           </TabsContent>
 
@@ -314,9 +417,7 @@ export default function AdminPage() {
                         >
                           <Crown className="w-4 h-4" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+
                       </div>
                     </div>
                   </div>
@@ -336,13 +437,15 @@ export default function AdminPage() {
                 <Input
                   placeholder="Paket ara..."
                   className="pl-9 h-9 text-xs rounded-xl bg-muted/30 border-border/30"
+                  value={packSearchQuery}
+                  onChange={e => setPackSearchQuery(e.target.value)}
                 />
               </div>
             </div>
 
             <div className="glass-card rounded-xl border border-border/20 overflow-hidden">
               <div className="divide-y divide-border/10 max-h-[450px] overflow-y-auto">
-                {packs.map((pack) => (
+                {filteredPacks.map((pack) => (
                   <div key={pack.id} className="px-3 py-2.5 flex items-center gap-2">
                     <img
                       src={pack.tray_image_url || pack.stickers?.[0]?.image_url || "/placeholder.png"}
@@ -432,7 +535,7 @@ export default function AdminPage() {
 
       {/* Credit Dialog */}
       <Dialog open={creditDialogOpen} onOpenChange={setCreditDialogOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby="credit-dialog-description">
           <DialogHeader>
             <DialogTitle>Kredi Ekle: {selectedUser?.name}</DialogTitle>
           </DialogHeader>
@@ -464,7 +567,7 @@ export default function AdminPage() {
 
       {/* Edit Pack Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby="edit-dialog-description">
           <DialogHeader>
             <DialogTitle>Paketi Düzenle</DialogTitle>
           </DialogHeader>
