@@ -33,6 +33,13 @@ ALTER TABLE public.credit_transactions ADD COLUMN IF NOT EXISTS reason TEXT DEFA
 
 -- 4. Recreate Logic RPCs (Pointing strictly to public.users)
 
+-- DROP OLD FUNCTIONS FIRST (Avoids signature/return type conflicts)
+DROP FUNCTION IF EXISTS deduct_credits(INT);
+DROP FUNCTION IF EXISTS admin_add_credits(UUID, INT);
+DROP FUNCTION IF EXISTS admin_add_credits(UUID, INT, TEXT);
+DROP FUNCTION IF EXISTS claim_daily_bonus();
+DROP FUNCTION IF EXISTS reward_ad_credits();
+
 -- Deduct Credits
 create or replace function deduct_credits(amount int)
 returns jsonb language plpgsql security definer
@@ -59,7 +66,7 @@ end;
 $$;
 
 -- Admin Add Credits
-create or replace function admin_add_credits(target_user_id uuid, amount int)
+create or replace function admin_add_credits(target_user_id uuid, amount_to_add int, update_reason text default 'Admin Gift')
 returns jsonb language plpgsql security definer
 as $$
 declare
@@ -73,11 +80,11 @@ begin
   end if;
 
   update public.users 
-  set credits = credits + amount 
+  set credits = credits + amount_to_add 
   where id = target_user_id;
   
   insert into credit_transactions (user_id, amount, type, reason)
-  values (target_user_id, amount, 'add', 'Admin Gift');
+  values (target_user_id, amount_to_add, 'add', update_reason);
   
   return jsonb_build_object('success', true, 'message', 'Credits added');
 end;
