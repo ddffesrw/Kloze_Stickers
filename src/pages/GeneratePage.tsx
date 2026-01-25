@@ -184,8 +184,11 @@ export default function GeneratePage() {
 
   const getFullPrompt = () => {
     // Style'ı prompt'a ekle
-    const styleHint = selectedStyle !== "3d" ? `, ${selectedStyle} style` : "";
-    const fullPrompt = `${prompt}${styleHint}, sticker style`;
+    const selectedStyleObj = aiStyles.find(s => s.id === selectedStyle);
+    const stylePrompt = selectedStyleObj?.prompt || "";
+
+    // Combine user prompt with style prompt
+    const fullPrompt = `${prompt}, ${stylePrompt}, sticker style`;
 
     return fullPrompt;
   };
@@ -201,12 +204,7 @@ export default function GeneratePage() {
   // Progress percentage
   const progressPercentage = progress?.progress || 0;
 
-  const styleIcons: Record<string, string> = {
-    "3d": "🎲",
-    "anime": "🌸",
-    "minimalist": "◯",
-    "vector": "✏️",
-  };
+
 
   return (
     <div className="min-h-screen bg-background pb-28 relative">
@@ -328,19 +326,20 @@ export default function GeneratePage() {
                 onClick={() => setSelectedStyle(style.id)}
                 disabled={isGenerating}
                 className={cn(
-                  "aspect-square rounded-3xl p-4 relative overflow-hidden transition-all duration-300",
-                  "flex flex-col items-center justify-center gap-2",
+                  "aspect-square rounded-3xl p-3 relative overflow-hidden transition-all duration-300",
+                  "flex flex-col items-center justify-center gap-1",
                   "disabled:opacity-50 disabled:cursor-not-allowed",
                   selectedStyle === style.id
                     ? "glass-card border-2 border-primary/50 glow-violet scale-105"
                     : "glass-card border border-border/30 hover:border-primary/30 hover:scale-105"
                 )}
+                title={style.description}
               >
-                <span className="text-3xl">{styleIcons[style.id]}</span>
-                <span className="text-xs font-bold text-foreground">{style.name}</span>
+                <span className="text-2xl">{style.icon}</span>
+                <span className="text-[10px] font-bold text-foreground text-center leading-tight">{style.name}</span>
                 {selectedStyle === style.id && (
-                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-                    <Check className="w-3 h-3 text-primary-foreground" />
+                  <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+                    <Check className="w-2.5 h-2.5 text-primary-foreground" />
                   </div>
                 )}
               </button>
