@@ -193,10 +193,18 @@ export const currentUser: User = {
 };
 
 export const aiStyles = [
-  { id: "3d", name: "3D", icon: "🎲" },
-  { id: "anime", name: "Anime", icon: "🌸" },
-  { id: "minimalist", name: "Minimalist", icon: "◯" },
-  { id: "vector", name: "Vector", icon: "✏️" },
+  { id: "3d", name: "3D Render", icon: "🎲", description: "Gerçekçi 3D görünüm" },
+  { id: "anime", name: "Anime", icon: "🌸", description: "Japon çizgi film tarzı" },
+  { id: "minimalist", name: "Minimalist", icon: "◯", description: "Sade ve şık" },
+  { id: "vector", name: "Vector", icon: "✏️", description: "Düz renkli illüstrasyon" },
+  { id: "kawaii", name: "Kawaii", icon: "🧸", description: "Sevimli Japon stili" },
+  { id: "pixel", name: "Pixel Art", icon: "🕹️", description: "Retro oyun grafikleri" },
+  { id: "watercolor", name: "Sulu Boya", icon: "🎨", description: "Sanatsal ve yumuşak" },
+  { id: "neon", name: "Neon", icon: "💡", description: "Parlak cyberpunk" },
+  { id: "cartoon", name: "Cartoon", icon: "🎬", description: "Çizgi film karakteri" },
+  { id: "sketch", name: "Sketch", icon: "✍️", description: "El çizimi görünümü" },
+  { id: "cyberpunk", name: "Cyberpunk", icon: "🤖", description: "Futuristik teknoloji" },
+  { id: "pop-art", name: "Pop Art", icon: "🖼️", description: "Renkli ve cesur" },
 ];
 
 export const adminStats = {
