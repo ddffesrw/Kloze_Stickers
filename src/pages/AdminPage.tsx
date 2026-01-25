@@ -216,6 +216,11 @@ export default function AdminPage() {
         <span className="text-xs bg-red-500/10 text-red-500 px-2 py-1 rounded-full font-mono">SUPREME POWER</span>
       </header>
 
+      {/* Deployment Canary */}
+      <div className="bg-green-500 text-white text-center py-2 font-bold animate-pulse">
+        🚀 YÜKLEME BAŞARILI V1.0 - TEST MODU
+      </div>
+
       <main className="p-4 space-y-6">
         {/* Stats Grid */}
         <div className="grid grid-cols-4 gap-3">
