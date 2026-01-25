@@ -1,6 +1,6 @@
 
 import { HfInference } from "@huggingface/inference";
-import imglyRemoveBackground from "@imgly/background-removal";
+import { removeBackground } from "@imgly/background-removal";
 import { supabase } from "@/lib/supabase";
 
 // Initialize client
@@ -9,7 +9,7 @@ const hf = new HfInference(import.meta.env.VITE_HUGGING_FACE_TOKEN);
 /**
  * Generate Sticker using FLUX.1-Schnell (Fast & Good Quality)
  */
-export async function generateStickerWithHF(prompt: string, userId: string): Promise<{ success: boolean, imageUrl?: string, error?: string }> {
+export async function generateStickerHF(prompt: string, userId: string): Promise<{ success: boolean, imageUrl?: string, error?: string }> {
     try {
         console.log("Generating with Hugging Face...", prompt);
 
@@ -18,9 +18,9 @@ export async function generateStickerWithHF(prompt: string, userId: string): Pro
             model: "black-forest-labs/FLUX.1-schnell",
             inputs: `sticker style, solitary, white background, vector art, ${prompt}`,
             parameters: {
-                // @ts-ignore - FLUX specific params might not be fully typed in SDK yet
-                num_inference_steps: 4, // Schnell is fast
-                guidance_scale: 0.0 // Schnell often uses 0 or low guidance, forcing defaults
+                // @ts-ignore
+                num_inference_steps: 4,
+                guidance_scale: 0.0
             }
         });
 
@@ -28,7 +28,7 @@ export async function generateStickerWithHF(prompt: string, userId: string): Pro
         console.log("Removing background...");
         // Convert Blob to URL for mgly
         const tempUrl = URL.createObjectURL(blob);
-        const processedBlob = await imglyRemoveBackground(tempUrl);
+        const processedBlob = await removeBackground(tempUrl);
 
         // 3. Upload to Supabase
         const fileName = `${userId}/${Date.now()}_hf.webp`;
