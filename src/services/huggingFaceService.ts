@@ -13,14 +13,21 @@ export async function generateStickerHF(prompt: string, userId: string): Promise
     try {
         console.log("Generating with Hugging Face...", prompt);
 
+        // Prompt Engineering: Sticker Template
+        const enhancedPrompt = `die-cut sticker of ${prompt}, vector art, white border, flat design, white background, high quality illustration`;
+        const negativePrompt = "shadow, realistic, photo, 3d, complex background";
+
+        console.log("Enhanced Prompt:", enhancedPrompt);
+
         // 1. Call HF API
         const blob = await hf.textToImage({
             model: "black-forest-labs/FLUX.1-schnell",
-            inputs: `sticker style, solitary, white background, vector art, ${prompt}`,
+            inputs: enhancedPrompt,
             parameters: {
                 // @ts-ignore
                 num_inference_steps: 4,
-                guidance_scale: 0.0
+                guidance_scale: 0.0,
+                negative_prompt: negativePrompt
             }
         });
 

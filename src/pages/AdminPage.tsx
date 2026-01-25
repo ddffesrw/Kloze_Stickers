@@ -25,6 +25,7 @@ import {
   deletePack,
   updatePackTitle
 } from "@/services/stickerService";
+import { generateStickerHF } from "@/services/huggingFaceService";
 import { User } from "@supabase/supabase-js";
 import {
   Dialog,
@@ -69,6 +70,11 @@ export default function AdminPage() {
   const [category, setCategory] = useState("Eğlence");
   const [isPremium, setIsPremium] = useState(false);
   const [selectedCoverIndex, setSelectedCoverIndex] = useState(0);
+
+  // AI Generate State
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiResult, setAiResult] = useState<string | null>(null);
 
   // 2. EFFECTS
   useEffect(() => {
@@ -197,6 +203,29 @@ export default function AdminPage() {
     }
   };
 
+  const handleAIGenerate = async () => {
+    if (!user || !aiPrompt.trim()) {
+      toast.error("Lütfen bir prompt girin");
+      return;
+    }
+    setAiGenerating(true);
+    const toastId = toast.loading("AI sticker oluşturuluyor...");
+    try {
+      const result = await generateStickerHF(aiPrompt, user.id);
+      if (result.success) {
+        toast.success("Sticker oluşturuldu!", { id: toastId });
+        setAiResult(result.imageUrl || null);
+        setAiPrompt("");
+      } else {
+        toast.error(result.error || "Oluşturma başarısız", { id: toastId });
+      }
+    } catch (e) {
+      toast.error("Hata", { id: toastId });
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
   // 4. RENDER
   if (loading) return <div className="p-10 text-center">Loading...</div>;
   if (user?.email !== ADMIN_EMAIL) return <Navigate to="/" replace />;
@@ -245,11 +274,12 @@ export default function AdminPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="w-full grid grid-cols-4 mb-4">
+          <TabsList className="w-full grid grid-cols-5 mb-4">
             <TabsTrigger value="overview">Genel</TabsTrigger>
             <TabsTrigger value="users">Üyeler</TabsTrigger>
             <TabsTrigger value="packs">Paketler</TabsTrigger>
             <TabsTrigger value="upload">Yükle</TabsTrigger>
+            <TabsTrigger value="ai">AI Üret</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -527,6 +557,40 @@ export default function AdminPage() {
                 <Button className="w-full" onClick={handleUpload} disabled={uploading}>
                   {uploading ? "Yükleniyor..." : "Yayınla"}
                 </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="ai" className="space-y-4">
+            <div className="glass-card rounded-xl border border-border/20 p-6">
+              <h3 className="font-bold mb-4 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-primary" />
+                Ücretsiz AI Sticker (Hugging Face FLUX)
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">Prompt (İngilizce)</label>
+                  <Input
+                    placeholder="örn: cute cat with sunglasses"
+                    value={aiPrompt}
+                    onChange={e => setAiPrompt(e.target.value)}
+                    className="h-12"
+                  />
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={handleAIGenerate}
+                  disabled={aiGenerating || !aiPrompt.trim()}
+                >
+                  {aiGenerating ? "Oluşturuluyor..." : "Ücretsiz Üret"}
+                </Button>
+                {aiResult && (
+                  <div className="mt-4 p-4 rounded-xl border border-primary/20 bg-primary/5">
+                    <p className="text-xs text-muted-foreground mb-2">Sonuç:</p>
+                    <img src={aiResult} className="w-32 h-32 object-contain mx-auto rounded-lg" alt="Generated" />
+                    <p className="text-xs text-center text-muted-foreground mt-2">Sticker "Drafts"a eklendi</p>
+                  </div>
+                )}
               </div>
             </div>
           </TabsContent>
