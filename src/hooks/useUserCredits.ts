@@ -10,7 +10,7 @@ export function useUserCredits() {
         if (!user) return 0;
 
         const { data, error } = await supabase
-            .from('profiles')
+            .from('users')
             .select('credits')
             .eq('id', user.id)
             .single();
