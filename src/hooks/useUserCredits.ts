@@ -58,5 +58,9 @@ export function useUserCredits() {
         };
     }, [queryClient]);
 
+    const invalidateCredits = () => {
+        queryClient.invalidateQueries({ queryKey: ['userCredits'] });
+    };
+
     return { credits, isLoading, refetch, invalidateCredits };
 }
