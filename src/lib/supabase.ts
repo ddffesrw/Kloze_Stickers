@@ -24,6 +24,7 @@ export interface Database {
       sticker_packs: {
         Row: {
           id: string;
+          user_id: string;
           name: string;
           publisher: string;
           creator_id: string;
@@ -34,10 +35,11 @@ export interface Database {
           category: string;
           is_premium: boolean;
           downloads: number;
+          likes_count: number;
           created_at: string;
           updated_at: string;
         };
-        Insert: Omit<Database['public']['Tables']['sticker_packs']['Row'], 'id' | 'created_at' | 'updated_at'>;
+        Insert: Omit<Database['public']['Tables']['sticker_packs']['Row'], 'id' | 'created_at' | 'updated_at' | 'downloads' | 'likes_count'>;
         Update: Partial<Database['public']['Tables']['sticker_packs']['Insert']>;
       };
       stickers: {
@@ -51,6 +53,49 @@ export interface Database {
         };
         Insert: Omit<Database['public']['Tables']['stickers']['Row'], 'id' | 'created_at'>;
         Update: Partial<Database['public']['Tables']['stickers']['Insert']>;
+      };
+      user_stickers: {
+        Row: {
+          id: string;
+          user_id: string;
+          pack_id: string | null;
+          image_url: string;
+          thumbnail_url: string;
+          prompt: string;
+          seed: number;
+          width: number;
+          height: number;
+          size_bytes: number;
+          emojis: string[];
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['user_stickers']['Row'], 'id' | 'created_at' | 'sort_order'>;
+        Update: Partial<Database['public']['Tables']['user_stickers']['Insert']>;
+      };
+      profiles: {
+        Row: {
+          id: string;
+          email: string;
+          name: string;
+          avatar_url: string;
+          credits: number;
+          is_pro: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['profiles']['Row'], 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['profiles']['Insert']>;
+      };
+      pack_likes: {
+        Row: {
+          id: string;
+          user_id: string;
+          pack_id: string;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['pack_likes']['Row'], 'id' | 'created_at'>;
+        Update: Partial<Database['public']['Tables']['pack_likes']['Insert']>;
       };
       users: {
         Row: {

@@ -138,21 +138,10 @@ export default function PackDetailPage() {
       {/* Background */}
       <div className="fixed inset-0 mesh-gradient opacity-30 pointer-events-none" />
 
-      {/* Hero Header */}
-      <div className="relative">
-        {/* Cover Image */}
-        <div className="aspect-[4/3] w-full overflow-hidden">
-          <img
-            src={pack.cover_image_url}
-            alt={pack.name}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-secondary/20" />
-        </div>
-
+      {/* Compact Header - No Cover Image */}
+      <div className="relative pt-4 pb-6 px-4">
         {/* Navigation */}
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 z-10">
+        <div className="flex items-center justify-between mb-6">
           <Link
             to="/"
             className="p-3 rounded-2xl glass-card border border-border/30 hover:bg-muted/50 transition-all hover:scale-105"
@@ -184,38 +173,41 @@ export default function PackDetailPage() {
         </div>
 
         {/* Pack Info Card */}
-        <div className="absolute -bottom-24 left-4 right-4 z-20">
-          <div className="glass-card rounded-3xl p-5 border border-border/30">
-            <div className="flex gap-4">
-              {/* Creator Avatar */}
-              <div className="relative flex-shrink-0">
-                <img
-                  src={pack.creator_avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'}
-                  alt={pack.creator_name}
-                  className="w-16 h-16 rounded-2xl border-2 border-primary/30"
-                />
+        <div className="glass-card rounded-3xl p-5 border border-border/30">
+          <div className="flex gap-4">
+            {/* Creator Avatar */}
+            <div className="relative flex-shrink-0">
+              <img
+                src={pack.creator_avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'}
+                alt={pack.creator_name}
+                className="w-16 h-16 rounded-2xl border-2 border-primary/30"
+              />
+              {pack.is_premium && (
+                <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg gradient-gold glow-gold flex items-center justify-center">
+                  <Crown className="w-3 h-3" />
+                </div>
+              )}
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl font-black text-foreground truncate">{pack.name}</h1>
+              <p className="text-muted-foreground text-sm">by {pack.publisher}</p>
+
+              {/* Stats */}
+              <div className="flex items-center gap-3 mt-3">
                 {pack.is_premium && (
-                  <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg gradient-gold glow-gold flex items-center justify-center">
-                    <Crown className="w-3 h-3" />
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl gradient-gold">
+                    <Crown className="w-4 h-4" />
                   </div>
                 )}
-              </div>
-
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <h1 className="text-xl font-black text-foreground truncate">{pack.name}</h1>
-                <p className="text-muted-foreground text-sm">by {pack.publisher}</p>
-
-                {/* Stats */}
-                <div className="flex items-center gap-3 mt-3">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-secondary/10 border border-secondary/20">
-                    <Sparkles className="w-4 h-4 text-secondary" />
-                    <span className="text-sm font-bold text-secondary">{pack.stickers.length}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20">
-                    <Download className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-bold text-primary">{(pack.downloads || 0).toLocaleString()}</span>
-                  </div>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-secondary/10 border border-secondary/20">
+                  <Sparkles className="w-4 h-4 text-secondary" />
+                  <span className="text-sm font-bold text-secondary">{pack.stickers.length}</span>
+                </div>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20">
+                  <Download className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-bold text-primary">{(pack.downloads || 0).toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -224,7 +216,7 @@ export default function PackDetailPage() {
       </div>
 
       {/* Content */}
-      <div className="relative z-10 px-4 pt-28 space-y-6">
+      <div className="relative z-10 px-4 space-y-6">
         {/* Share Buttons - WHATSAPP BUTONU 3+ STICKER'DA AKTİF */}
         <div className="flex gap-3">
           <Button

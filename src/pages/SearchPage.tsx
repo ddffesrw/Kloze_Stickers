@@ -1,15 +1,34 @@
-import { useState } from "react";
-import { Search, X, TrendingUp, Sparkles } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, X, TrendingUp, Sparkles, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { CategoryPill } from "@/components/kloze/CategoryPill";
 import { PackCard } from "@/components/kloze/PackCard";
-import { categories, allPacks } from "@/data/mockData";
+import { categories } from "@/data/mockData";
 import { cn } from "@/lib/utils";
+import { getAllStickerPacks, searchStickerPacks } from "@/services/stickerPackService";
+import { ComingSoonCard } from "@/components/kloze/ComingSoonCard";
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [isFocused, setIsFocused] = useState(false);
+  const [allPacks, setAllPacks] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch real packs from Supabase
+  useEffect(() => {
+    const loadPacks = async () => {
+      try {
+        const packs = await getAllStickerPacks();
+        setAllPacks(packs || []);
+      } catch (e) {
+        console.error("Packs load error:", e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadPacks();
+  }, []);
 
   const toggleCategory = (categoryName: string) => {
     setSelectedCategories((prev) =>
@@ -22,8 +41,8 @@ export default function SearchPage() {
   const filteredPacks = allPacks.filter((pack) => {
     const matchesQuery =
       !query ||
-      pack.name.toLowerCase().includes(query.toLowerCase()) ||
-      pack.creator.toLowerCase().includes(query.toLowerCase());
+      (pack.name || pack.title || "").toLowerCase().includes(query.toLowerCase()) ||
+      (pack.publisher || pack.creator || "").toLowerCase().includes(query.toLowerCase());
 
     const matchesCategory =
       selectedCategories.length === 0 ||
@@ -38,7 +57,7 @@ export default function SearchPage() {
     <div className="min-h-screen bg-background pb-28 relative">
       {/* Background */}
       <div className="fixed inset-0 mesh-gradient opacity-30 pointer-events-none" />
-      
+
       {/* Header */}
       <header className="sticky top-0 z-40 glass-card border-b border-border/20">
         <div className="p-4 space-y-4">
@@ -128,10 +147,14 @@ export default function SearchPage() {
             </span>
           </div>
 
-          {filteredPacks.length > 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : filteredPacks.length > 0 ? (
             <div className="grid grid-cols-2 gap-4">
               {filteredPacks.map((pack, index) => (
-                <div 
+                <div
                   key={pack.id}
                   className="animate-fade-in"
                   style={{ animationDelay: `${index * 50}ms` }}
@@ -139,6 +162,9 @@ export default function SearchPage() {
                   <PackCard pack={pack} />
                 </div>
               ))}
+
+              {/* Coming Soon Card */}
+              <ComingSoonCard />
             </div>
           ) : (
             <div className="text-center py-16 animate-fade-in">

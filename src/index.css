@@ -103,19 +103,18 @@
 }
 
 @layer components {
+
   /* Premium Glass Card */
   .glass-card {
     @apply bg-card/60 backdrop-blur-2xl border border-border/30;
-    background: linear-gradient(
-      135deg,
-      hsl(var(--card) / 0.8) 0%,
-      hsl(var(--card) / 0.4) 100%
-    );
+    background: linear-gradient(135deg,
+        hsl(var(--card) / 0.8) 0%,
+        hsl(var(--card) / 0.4) 100%);
   }
 
   /* Mesh Gradient Backgrounds */
   .mesh-gradient {
-    background: 
+    background:
       radial-gradient(at 20% 20%, hsl(var(--glow-violet) / 0.3) 0%, transparent 50%),
       radial-gradient(at 80% 30%, hsl(var(--glow-cyan) / 0.2) 0%, transparent 50%),
       radial-gradient(at 40% 80%, hsl(var(--glow-pink) / 0.2) 0%, transparent 50%),
@@ -123,7 +122,7 @@
   }
 
   .mesh-gradient-intense {
-    background: 
+    background:
       radial-gradient(at 0% 0%, hsl(var(--glow-violet) / 0.5) 0%, transparent 40%),
       radial-gradient(at 100% 0%, hsl(var(--glow-cyan) / 0.4) 0%, transparent 40%),
       radial-gradient(at 50% 100%, hsl(var(--glow-pink) / 0.4) 0%, transparent 40%),
@@ -132,28 +131,28 @@
 
   /* Neon Glow Effects */
   .glow-violet {
-    box-shadow: 
+    box-shadow:
       0 0 20px hsl(var(--glow-violet) / 0.5),
       0 0 40px hsl(var(--glow-violet) / 0.3),
       0 0 80px hsl(var(--glow-violet) / 0.1);
   }
 
   .glow-cyan {
-    box-shadow: 
+    box-shadow:
       0 0 20px hsl(var(--glow-cyan) / 0.5),
       0 0 40px hsl(var(--glow-cyan) / 0.3),
       0 0 80px hsl(var(--glow-cyan) / 0.1);
   }
 
   .glow-pink {
-    box-shadow: 
+    box-shadow:
       0 0 20px hsl(var(--glow-pink) / 0.5),
       0 0 40px hsl(var(--glow-pink) / 0.3),
       0 0 80px hsl(var(--glow-pink) / 0.1);
   }
 
   .glow-gold {
-    box-shadow: 
+    box-shadow:
       0 0 20px hsl(var(--glow-gold) / 0.5),
       0 0 40px hsl(var(--glow-gold) / 0.3),
       0 0 80px hsl(var(--glow-gold) / 0.1);
@@ -199,8 +198,15 @@
   }
 
   @keyframes gradient-shift {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
+
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+
+    50% {
+      background-position: 100% 50%;
+    }
   }
 
   /* Die-cut Sticker Style */
@@ -211,19 +217,22 @@
 
   /* Shimmer Loading */
   .shimmer {
-    background: linear-gradient(
-      90deg,
-      hsl(var(--muted)) 0%,
-      hsl(var(--muted-foreground) / 0.15) 50%,
-      hsl(var(--muted)) 100%
-    );
+    background: linear-gradient(90deg,
+        hsl(var(--muted)) 0%,
+        hsl(var(--muted-foreground) / 0.15) 50%,
+        hsl(var(--muted)) 100%);
     background-size: 200% 100%;
     animation: shimmer 2s infinite;
   }
 
   @keyframes shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0% {
+      background-position: 200% 0;
+    }
+
+    100% {
+      background-position: -200% 0;
+    }
   }
 
   /* Floating Animation */
@@ -240,9 +249,19 @@
   }
 
   @keyframes float {
-    0%, 100% { transform: translateY(0) rotate(0deg); }
-    25% { transform: translateY(-10px) rotate(2deg); }
-    75% { transform: translateY(5px) rotate(-2deg); }
+
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+
+    25% {
+      transform: translateY(-10px) rotate(2deg);
+    }
+
+    75% {
+      transform: translateY(5px) rotate(-2deg);
+    }
   }
 
   /* Pulse Glow */
@@ -251,8 +270,17 @@
   }
 
   @keyframes pulse-glow {
-    0%, 100% { opacity: 1; filter: brightness(1); }
-    50% { opacity: 0.8; filter: brightness(1.2); }
+
+    0%,
+    100% {
+      opacity: 1;
+      filter: brightness(1);
+    }
+
+    50% {
+      opacity: 0.8;
+      filter: brightness(1.2);
+    }
   }
 
   /* Rotate Slow */
@@ -261,8 +289,13 @@
   }
 
   @keyframes rotate-slow {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+      transform: rotate(0deg);
+    }
+
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   /* Scale on Hover */
@@ -330,12 +363,40 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-  
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
 
   .text-balance {
     text-wrap: balance;
+  }
+}
+
+/* Shimmer animation for banner */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-200%) skewX(-12deg);
+  }
+
+  100% {
+    transform: translateX(200%) skewX(-12deg);
+  }
+}
+
+/* Smooth fade-in */
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

@@ -1,16 +1,18 @@
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, Navigate } from "react-router-dom";
 import {
   ArrowLeft, Package, Users, DollarSign, Upload, Search,
   Plus, Minus, Crown, Sparkles, Activity, MoreVertical, Eye, Trash2,
-  Settings, BarChart3, Bell, CheckCircle, Shield, Zap, Coins
+  Settings, BarChart3, Bell, CheckCircle, Shield, Zap, Coins, Loader2,
+  Image as ImageIcon, ShieldAlert, CreditCard, Layers, Edit, X, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { allPacks } from "@/data/mockData";
+import { allPacks, aiStyles, promptModifiers, generateFinalPrompt, translatePrompt } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { auth } from "@/lib/supabase";
+import { auth, supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { Lock } from "lucide-react";
 import {
@@ -20,12 +22,20 @@ import {
 } from "@/services/adminService";
 import {
   getAdminStats,
-  createAdminPack,
-  getNewPacks as getAllPacks,
-  deletePack,
-  updatePackTitle
 } from "@/services/stickerService";
-import { generateStickerHF } from "@/services/huggingFaceService";
+import {
+  createAdminPack,
+  getNewStickerPacks as getAllPacks,
+  deleteStickerPack as deletePack,
+  updatePackTitle
+} from "@/services/stickerPackService";
+import {
+  generateStickerHF,
+  getForgeModels,
+  getForgeCurrentModel,
+  setForgeModel
+} from "@/services/forgeService";
+import { removeBackgroundWithRetry } from "@/services/backgroundRemovalService";
 import { User } from "@supabase/supabase-js";
 import {
   Dialog,
@@ -75,6 +85,27 @@ export default function AdminPage() {
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiResult, setAiResult] = useState<string | null>(null);
+  const [aiRemoveBg, setAiRemoveBg] = useState(true);
+
+  // Model State
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [currentModel, setCurrentModel] = useState("");
+  const [changingModel, setChangingModel] = useState(false);
+
+  // Bulk Gen State
+  const [bulkPrompt, setBulkPrompt] = useState("");
+  const [bulkQuantity, setBulkQuantity] = useState(0); // Default to 0 as requested
+  const [selectedStyle, setSelectedStyle] = useState("3d"); // Style State
+  const [bulkGenerating, setBulkGenerating] = useState(false);
+  const [bulkResults, setBulkResults] = useState<{ id: string, imageURL: string, seed: number, loading?: boolean, blob?: Blob }[]>([]);
+  const [bulkPackTitle, setBulkPackTitle] = useState("");
+  const [bulkCategory, setBulkCategory] = useState("Sanat");
+  const [selectedModifiers, setSelectedModifiers] = useState<string[]>(["masterpiece", "sharpFocus"]); // Default modifiers
+
+  // Generation Progress Modal State
+  const [progressModalOpen, setProgressModalOpen] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState<{ index: number, status: 'pending' | 'generating' | 'done' | 'error' | 'cancelled' }[]>([]);
+  const cancelGenerationRef = useRef(false);
 
   // 2. EFFECTS
   useEffect(() => {
@@ -83,8 +114,41 @@ export default function AdminPage() {
       const u = await auth.getCurrentUser();
       setUser(u);
       setLoading(false);
+
+      // Load Initial Models (Fire and forget)
+      loadModels();
     };
     init();
+  }, []);
+
+  const loadModels = async () => {
+    const models = await getForgeModels();
+    setAvailableModels(models);
+    const current = await getForgeCurrentModel();
+    setCurrentModel(current);
+  };
+
+  const handleModelChange = async (newModel: string) => {
+    if (!newModel || newModel === currentModel) return;
+    setChangingModel(true);
+    const success = await setForgeModel(newModel);
+    if (success) {
+      setCurrentModel(newModel);
+      toast.success(`Model değiştirildi: ${newModel}`);
+    } else {
+      toast.error("Model değiştirilemedi");
+    }
+    setChangingModel(false);
+  };
+
+  // Track blob URLs for cleanup to avoid memory leaks
+  const blobUrlsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    return () => {
+      // Cleanup all created blob URLs on unmount
+      blobUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+    };
   }, []);
 
   useEffect(() => {
@@ -133,14 +197,14 @@ export default function AdminPage() {
   const handleTogglePro = async (targetUser: any) => {
     const newStatus = !targetUser.is_pro;
     const confirmMsg = newStatus
-      ? `${targetUser.email} kullanıcısını PRO yapmak istiyor musun?`
-      : `${targetUser.email} kullanıcısının PRO yetkisini almak istiyor musun?`;
+      ? `${targetUser.email} kullanıcısını PRO yapmak istiyor musun ? `
+      : `${targetUser.email} kullanıcısının PRO yetkisini almak istiyor musun ? `;
 
     if (!confirm(confirmMsg)) return;
 
     try {
       await adminTogglePro(targetUser.id, newStatus);
-      toast.success(`Kullanıcı durumu güncellendi: ${newStatus ? 'PRO' : 'Free'}`);
+      toast.success(`Kullanıcı durumu güncellendi: ${newStatus ? 'PRO' : 'Free'} `);
 
       // Update local state
       setUsers(users.map(u => u.id === targetUser.id ? { ...u, is_pro: newStatus } : u));
@@ -170,6 +234,18 @@ export default function AdminPage() {
       setEditDialogOpen(false);
     } catch (e) {
       toast.error("Güncelleme başarısız");
+    }
+  };
+
+  const handleTogglePackPremium = async (packId: string, currentStatus: boolean) => {
+    const newStatus = !currentStatus;
+    try {
+      const { error } = await supabase.from('sticker_packs').update({ is_premium: newStatus }).eq('id', packId);
+      if (error) throw error;
+      toast.success(newStatus ? "Paket Pro Olarak İşaretlendi" : "Paket Herkese Açıldı");
+      setPacks(packs.map(p => p.id === packId ? { ...p, is_premium: newStatus } : p));
+    } catch (e) {
+      toast.error("Durum güncellenemedi");
     }
   };
 
@@ -211,18 +287,189 @@ export default function AdminPage() {
     setAiGenerating(true);
     const toastId = toast.loading("AI sticker oluşturuluyor...");
     try {
-      const result = await generateStickerHF(aiPrompt, user.id);
-      if (result.success) {
-        toast.success("Sticker oluşturuldu!", { id: toastId });
-        setAiResult(result.imageUrl || null);
-        setAiPrompt("");
-      } else {
-        toast.error(result.error || "Oluşturma başarısız", { id: toastId });
-      }
-    } catch (e) {
-      toast.error("Hata", { id: toastId });
+      const result = await generateStickerHF({ prompt: aiPrompt });
+      toast.success("Sticker oluşturuldu!", { id: toastId });
+      setAiResult(result.imageURL || null);
+      setAiPrompt("");
+    } catch (e: any) {
+      toast.error(e?.message || "Oluşturma başarısız", { id: toastId });
     } finally {
       setAiGenerating(false);
+    }
+  };
+
+  const handleBulkGenerate = async () => {
+    if (!bulkPrompt.trim()) return;
+    if (bulkQuantity <= 0) {
+      toast.error("Lütfen üretilecek adet girin");
+      return;
+    }
+
+    // Reset cancel flag
+    cancelGenerationRef.current = false;
+
+    // Setup progress tracking
+    const initialProgress = Array.from({ length: bulkQuantity }, (_, i) => ({
+      index: i,
+      status: 'pending' as const
+    }));
+    setGenerationProgress(initialProgress);
+    setProgressModalOpen(true);
+    setBulkGenerating(true);
+
+    // Create copy for safe updating
+    let currentResults: { id: string, imageURL: string, seed: number }[] = [];
+
+    // Prompt Enhancer using new Modifier System
+    const selectedStyleObj = aiStyles.find(s => s.id === selectedStyle);
+    const stylePrompt = selectedStyleObj ? selectedStyleObj.prompt : "";
+
+    // TRANSLATE Turkish prompt to English first
+    const translatedPrompt = translatePrompt(bulkPrompt);
+    console.log("🔄 Translated prompt:", bulkPrompt, "→", translatedPrompt);
+
+    // Generate base prompt with modifiers (technical quality keywords)
+    const promptWithModifiers = generateFinalPrompt(translatedPrompt, selectedModifiers);
+
+    // Sticker-specific keywords
+    const stickerKeywords = "sticker design, vector style, white background, die-cut white border, centered, isolated on white background";
+
+    // Final combined prompt: Translated User + Modifiers + Style + Sticker Keywords
+    const fullPrompt = `${promptWithModifiers}, ${stylePrompt}, ${stickerKeywords}`;
+
+    // Loop with delay to avoid instant rate limiting if any
+    for (let i = 0; i < bulkQuantity; i++) {
+      // Check if cancelled
+      if (cancelGenerationRef.current) {
+        setGenerationProgress(prev => prev.map((p, idx) =>
+          idx >= i ? { ...p, status: 'cancelled' } : p
+        ));
+        break;
+      }
+
+      // Update status to generating
+      setGenerationProgress(prev => prev.map((p, idx) =>
+        idx === i ? { ...p, status: 'generating' } : p
+      ));
+
+      try {
+        const res = await generateStickerHF({ prompt: fullPrompt + ` variation ${i} ` });
+
+        // Background Removal Check
+        let finalImageUrl = res.imageURL;
+
+        // Track the initial URL from service
+        if (res.imageURL.startsWith('blob:')) {
+          blobUrlsRef.current.push(res.imageURL);
+        }
+
+        let blob = await fetch(res.imageURL).then(r => r.blob());
+        let itemBlob = blob; // Default to original
+
+        // Background Removal
+        if (aiRemoveBg) {
+          try {
+            const processedBlob = await removeBackgroundWithRetry(blob);
+            finalImageUrl = URL.createObjectURL(processedBlob);
+            blobUrlsRef.current.push(finalImageUrl);
+            itemBlob = processedBlob; // Use processed blob
+          } catch (bgError) {
+            console.error("BG Remove failed for bulk item", bgError);
+            // Keep original blob if removal fails
+          }
+        }
+
+        const newsticker = {
+          id: crypto.randomUUID(),
+          ...res,
+          imageURL: finalImageUrl,
+          blob: itemBlob // Store actual blob for publish
+        };
+
+        currentResults = [...currentResults, newsticker];
+        setBulkResults(prev => [...prev, newsticker]);
+
+        // Update status to done
+        setGenerationProgress(prev => prev.map((p, idx) =>
+          idx === i ? { ...p, status: 'done' } : p
+        ));
+
+        // Small delay
+        await new Promise(r => setTimeout(r, 500));
+
+      } catch (e) {
+        console.error("Bulk Item Error", e);
+        // Update status to error
+        setGenerationProgress(prev => prev.map((p, idx) =>
+          idx === i ? { ...p, status: 'error' } : p
+        ));
+      }
+    }
+    setBulkGenerating(false);
+
+    if (cancelGenerationRef.current) {
+      toast.info(`Üretim durduruldu! ${currentResults.length} sticker üretildi.`);
+    } else {
+      toast.success(`${currentResults.length}/${bulkQuantity} Sticker üretildi`);
+    }
+  };
+
+  const handleBulkPublish = async () => {
+    if (bulkResults.length === 0 || !bulkPackTitle) return;
+    const toastId = toast.loading("Paket oluşturuluyor...");
+    setBulkGenerating(true);
+
+    try {
+      // 1. Convert URLs to Files
+      // 1. Convert URLs to Files
+      const filePromises = bulkResults.map(async (item, idx) => {
+        let blob = item.blob;
+        if (!blob) {
+          // Fallback if no blob stored (old items?)
+          const res = await fetch(item.imageURL);
+          blob = await res.blob();
+        }
+        return new File([blob], `sticker_${idx}.webp`, { type: "image/webp" });
+      });
+
+      const filesToUpload = await Promise.all(filePromises);
+
+      // 2. Call existing Upload Service
+      // For bulk, we reuse 'createAdminPack' which takes File[]
+      // We assume they are already 'clean' enough (HF Flux is squareish usually)
+      // Note: We are missing background removal here if HF doesn't do it.
+      // The implementation plan said "Review -> Delete -> Publish".
+      // BG Removal typically happens AFTER generation. 
+      // For this specific 'bulk' tool, maybe we skip BG removal or do it on backend?
+      // Or we can add a check to remove bg? 
+      // Current HF service returns image. 
+      // Let's assume for now we publish them as is (user requested bulk gen + publish).
+      // If BG removal is needed, it would be very slow to do 20x.
+
+      const res = await createAdminPack(
+        user!.id,
+        filesToUpload,
+        bulkPackTitle,
+        "Kloze AI",
+        bulkCategory,
+        isPremium, // Use the state variable
+        0 // cover index
+      );
+
+      if (res.success) {
+        toast.success(res.message, { id: toastId });
+        setBulkResults([]);
+        setBulkPackTitle("");
+        setActiveTab("packs");
+      } else {
+        toast.error(res.message, { id: toastId });
+      }
+
+    } catch (e) {
+      console.error(e);
+      toast.error("Paketleme hatası", { id: toastId });
+    } finally {
+      setBulkGenerating(false);
     }
   };
 
@@ -498,6 +745,18 @@ export default function AdminPage() {
                       </div>
                     </div>
                     <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                          "w-7 h-7",
+                          pack.is_premium ? "text-amber-500" : "text-muted-foreground"
+                        )}
+                        onClick={() => handleTogglePackPremium(pack.id, pack.is_premium)}
+                        title={pack.is_premium ? "Pro'dan Çıkar" : "Pro Yap"}
+                      >
+                        <Crown className="w-3.5 h-3.5" />
+                      </Button>
                       <Button variant="ghost" size="icon" className="w-7 h-7"
                         onClick={() => {
                           setEditPackId(pack.id);
@@ -550,6 +809,28 @@ export default function AdminPage() {
 
               <div className="space-y-4">
                 <Input placeholder="Paket Adı" value={packTitle} onChange={e => setPackTitle(e.target.value)} />
+
+                {/* Category Selector */}
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Kategori</label>
+                  <select
+                    value={category}
+                    onChange={e => setCategory(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg bg-muted/30 border border-border/30 text-sm"
+                  >
+                    <option value="Eğlence">😂 Eğlence</option>
+                    <option value="Hayvanlar">🐱 Hayvanlar</option>
+                    <option value="Aşk">❤️ Aşk</option>
+                    <option value="Gaming">🎮 Gaming</option>
+                    <option value="Anime">✨ Anime</option>
+                    <option value="Meme">🤣 Meme</option>
+                    <option value="Müzik">🎵 Müzik</option>
+                    <option value="Spor">⚽ Spor</option>
+                    <option value="Yemek">🍕 Yemek</option>
+                    <option value="Seyahat">✈️ Seyahat</option>
+                  </select>
+                </div>
+
                 <div className="flex items-center gap-2">
                   <input type="checkbox" checked={isPremium} onChange={e => setIsPremium(e.target.checked)} id="prem" />
                   <label htmlFor="prem" className="text-sm font-bold">Premium Paket</label>
@@ -563,37 +844,343 @@ export default function AdminPage() {
 
           <TabsContent value="ai" className="space-y-4">
             <div className="glass-card rounded-xl border border-border/20 p-6">
-              <h3 className="font-bold mb-4 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-primary" />
-                Ücretsiz AI Sticker (Hugging Face FLUX)
-              </h3>
-              <div className="space-y-4">
-                <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  AI Sticker Üretici (Hugging Face)
+                </h3>
+                {bulkGenerating && (
+                  <span className="text-xs font-mono text-muted-foreground animate-pulse">
+                    Üretiliyor: {bulkResults.length} / {bulkQuantity}
+                  </span>
+                )}
+              </div>
+
+            </div>
+
+            <div className="space-y-4">
+              {/* Model & Prompt Row */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {/* Model Selector */}
+                <div className="md:col-span-1">
+                  <label className="text-sm text-yellow-500 font-bold mb-2 flex items-center justify-between">
+                    <span>Model</span>
+                    {changingModel && <Loader2 className="w-3 h-3 animate-spin" />}
+                    <button onClick={loadModels} className="text-[10px] text-muted-foreground hover:text-white">Yenile</button>
+                  </label>
+                  <select
+                    value={currentModel}
+                    onChange={(e) => handleModelChange(e.target.value)}
+                    disabled={changingModel || bulkGenerating}
+                    className="w-full h-12 px-3 rounded-lg bg-black/20 border border-yellow-500/30 text-xs focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
+                  >
+                    <option value="" disabled>Model Seç...</option>
+                    {availableModels.length > 0 ? (
+                      availableModels.map(m => (
+                        <option key={m} value={m}>{m.replace('.safetensors', '').substring(0, 20)}...</option>
+                      ))
+                    ) : (
+                      <option value="" disabled>Model bulunamadı (Forge açık mı?)</option>
+                    )}
+                  </select>
+                </div>
+
+                {/* Prompt Input */}
+                <div className="md:col-span-2">
                   <label className="text-sm text-muted-foreground mb-2 block">Prompt (İngilizce)</label>
                   <Input
                     placeholder="örn: cute cat with sunglasses"
-                    value={aiPrompt}
-                    onChange={e => setAiPrompt(e.target.value)}
+                    value={bulkPrompt}
+                    onChange={e => setBulkPrompt(e.target.value)}
+                    disabled={bulkGenerating}
                     className="h-12"
                   />
                 </div>
-                <Button
-                  className="w-full"
-                  onClick={handleAIGenerate}
-                  disabled={aiGenerating || !aiPrompt.trim()}
-                >
-                  {aiGenerating ? "Oluşturuluyor..." : "Ücretsiz Üret"}
-                </Button>
-                {aiResult && (
-                  <div className="mt-4 p-4 rounded-xl border border-primary/20 bg-primary/5">
-                    <p className="text-xs text-muted-foreground mb-2">Sonuç:</p>
-                    <img src={aiResult} className="w-32 h-32 object-contain mx-auto rounded-lg" alt="Generated" />
-                    <p className="text-xs text-center text-muted-foreground mt-2">Sticker "Drafts"a eklendi</p>
+
+                {/* Quantity Input */}
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">Adet</label>
+                  <div className="flex flex-col gap-2">
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      placeholder="0"
+                      value={bulkQuantity === 0 ? "" : bulkQuantity}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === "") {
+                          setBulkQuantity(0);
+                        } else {
+                          const num = parseInt(val);
+                          if (!isNaN(num) && num >= 0 && num <= 20) {
+                            setBulkQuantity(num);
+                          }
+                        }
+                      }}
+                      disabled={bulkGenerating}
+                      className="h-12 text-center text-lg font-bold"
+                    />
+                    <div className="flex gap-1 justify-between">
+                      {[1, 5, 10, 15, 20].map(n => (
+                        <button
+                          key={n}
+                          onClick={() => setBulkQuantity(n)}
+                          disabled={bulkGenerating}
+                          className="bg-muted hover:bg-muted/80 text-xs py-1 px-2 rounded border border-border/50 text-muted-foreground transition-colors"
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
+
+              {/* Style Selector */}
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground block">Stil Seç</label>
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide snap-x snap-mandatory pb-2">
+                  {aiStyles.map((style) => (
+                    <button
+                      key={style.id}
+                      onClick={() => setSelectedStyle(style.id)}
+                      disabled={bulkGenerating}
+                      className={cn(
+                        "flex-shrink-0 w-20 h-24 rounded-xl p-2 relative overflow-hidden transition-all duration-300 snap-start bg-black/20",
+                        "flex flex-col items-center justify-center gap-1",
+                        "disabled:opacity-50 disabled:cursor-not-allowed",
+                        selectedStyle === style.id
+                          ? "border-2 border-primary/50 bg-primary/10"
+                          : "border border-border/30 hover:border-primary/30"
+                      )}
+                      title={style.description}
+                    >
+                      <span className="text-2xl">{style.icon}</span>
+                      <span className="text-[9px] font-bold text-foreground text-center leading-tight line-clamp-2">{style.name}</span>
+                      {selectedStyle === style.id && (
+                        <div className="absolute top-1 right-1 w-3 h-3 rounded-full bg-primary flex items-center justify-center">
+                          <Check className="w-2 h-2 text-primary-foreground" />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Prompt Modifiers - Technical Enhancers */}
+              <div className="space-y-2">
+                <label className="text-sm text-cyan-400 font-bold flex items-center gap-2">
+                  🔧 Prompt Modifiers (Teknik Kalite)
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(promptModifiers).map(([key, mod]) => {
+                    const isSelected = selectedModifiers.includes(key);
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => {
+                          setSelectedModifiers(prev =>
+                            isSelected
+                              ? prev.filter(k => k !== key)
+                              : [...prev, key]
+                          );
+                        }}
+                        disabled={bulkGenerating}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200",
+                          "flex items-center gap-1.5 border",
+                          isSelected
+                            ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-300 shadow-sm shadow-cyan-500/20"
+                            : "bg-muted/30 border-border/40 text-muted-foreground hover:border-cyan-500/30 hover:text-cyan-400"
+                        )}
+                      >
+                        <span>{mod.icon}</span>
+                        <span>{mod.label}</span>
+                        {isSelected && <Check className="w-3 h-3" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Seçilen: {selectedModifiers.length} modifier • Stil ile karışmaz
+                </p>
+              </div>
+
+              {/* Options Row */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border/30">
+                <div>
+                  <p className="text-sm font-medium">Arka Planı Sil</p>
+                  <p className="text-xs text-muted-foreground">Şeffaf PNG sticker (Otomatik)</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={aiRemoveBg}
+                  onChange={e => setAiRemoveBg(e.target.checked)}
+                  className="w-5 h-5 accent-primary"
+                  disabled={bulkGenerating}
+                />
+              </div>
+
+              <Button
+                className="w-full h-12 text-lg"
+                onClick={handleBulkGenerate}
+                disabled={bulkGenerating || !bulkPrompt.trim()}
+              >
+                {bulkGenerating ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Oluşturuluyor... ({bulkResults.length})
+                  </div>
+                ) : (
+                  "Üretimi Başlat"
+                )}
+              </Button>
+
+              {/* Results Grid - Unified View */}
+              {bulkResults.length > 0 && (
+                <div className="mt-8 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <h4 className="font-bold text-lg">Sonuçlar ({bulkResults.length})</h4>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setBulkResults([])}
+                      disabled={bulkGenerating}
+                      className="text-destructive hover:text-destructive/80"
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Tümünü Sil
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-3 md:grid-cols-5 gap-4 p-4 rounded-xl border bg-black/20 max-h-[500px] overflow-y-auto custom-scrollbar">
+                    {bulkResults.map((res) => (
+                      <div key={res.id} className="relative group aspect-square rounded-xl overflow-hidden border border-border/40 bg-muted/5">
+                        <img src={res.imageURL} className={cn("w-full h-full object-contain p-1", res.loading && "opacity-50 blur-sm")} alt="Generated" />
+
+                        {res.loading && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                          </div>
+                        )}
+
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                          {/* View button - larger and primary */}
+                          <a
+                            href={res.imageURL}
+                            target="_blank"
+                            className="p-3 bg-primary/90 text-white rounded-full hover:bg-primary transition-colors shadow-lg"
+                            title="Büyüt"
+                          >
+                            <Eye className="w-5 h-5" />
+                          </a>
+                          {/* Delete button - smaller and requires confirmation */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm('Bu stickeri silmek istediğinize emin misiniz?')) {
+                                setBulkResults(prev => prev.filter(p => p.id !== res.id));
+                              }
+                            }}
+                            className="p-1.5 bg-red-500/70 text-white rounded-full hover:bg-red-600 transition-colors text-xs"
+                            title="Sil"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {bulkGenerating && (
+                      <div className="aspect-square rounded-xl border border-dashed border-primary/50 flex flex-col items-center justify-center bg-primary/5 animate-pulse">
+                        <Loader2 className="w-8 h-8 text-primary animate-spin mb-2" />
+                        <span className="text-xs text-primary font-mono">Üretiliyor...</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Publish Actions */}
+                  <div className="glass-card p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-emerald-500 uppercase tracking-wider flex items-center justify-between">
+                          <span>Paket Adı</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Creative pack name generator
+                              const words = bulkPrompt.split(" ").filter(w => w.length > 2).slice(0, 2);
+                              const styleObj = aiStyles.find(s => s.id === selectedStyle);
+                              const styleName = styleObj?.name || "Art";
+                              const suffixes = ["Pack", "Collection", "Series", "Set", "Bundle"];
+                              const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+
+                              const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+                              const baseName = words.map(capitalize).join(" ");
+
+                              const generatedName = baseName
+                                ? `${baseName} ${styleName} ${suffix}`
+                                : `${styleName} Sticker ${suffix}`;
+
+                              setBulkPackTitle(generatedName);
+                            }}
+                            className="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            Otomatik İsim
+                          </button>
+                        </label>
+                        <Input
+                          placeholder="Örn: Cyber Cats Pack"
+                          value={bulkPackTitle}
+                          onChange={e => setBulkPackTitle(e.target.value)}
+                          className="bg-black/20 border-emerald-500/30 focus-visible:ring-emerald-500/50"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-emerald-500 uppercase tracking-wider">Kategori</label>
+                        <select
+                          value={bulkCategory}
+                          onChange={e => setBulkCategory(e.target.value)}
+                          className="w-full h-10 px-3 rounded-lg bg-black/20 border border-emerald-500/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                        >
+                          <option value="Eğlence">😂 Eğlence</option>
+                          <option value="Hayvanlar">🐱 Hayvanlar</option>
+                          <option value="Aşk">❤️ Aşk</option>
+                          <option value="Gaming">🎮 Gaming</option>
+                          <option value="Sanat">🎨 Sanat</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2 p-2 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                        <input
+                          type="checkbox"
+                          id="bulkPremium"
+                          className="w-4 h-4 accent-orange-500"
+                          checked={isPremium}
+                          onChange={e => setIsPremium(e.target.checked)}
+                        />
+                        <label htmlFor="bulkPremium" className="text-xs font-bold text-orange-400 uppercase tracking-wider cursor-pointer flex items-center gap-1">
+                          <Crown className="w-3 h-3" />
+                          Premium Paket (Pro Only)
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button
+                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold h-12 shadow-lg shadow-emerald-900/20"
+                    onClick={handleBulkPublish}
+                    disabled={bulkGenerating || bulkResults.length === 0 || !bulkPackTitle.trim()}
+                  >
+                    <Package className="w-5 h-5 mr-2" />
+                    Paket Olarak Yayınla ({bulkResults.length})
+                  </Button>
+                </div>
+              )}
             </div>
           </TabsContent>
+
+
         </Tabs>
       </main>
 
@@ -647,6 +1234,94 @@ export default function AdminPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+
+      {/* Generation Progress Modal */}
+      <Dialog open={progressModalOpen} onOpenChange={(open) => {
+        // Only allow closing when not generating
+        if (!bulkGenerating) setProgressModalOpen(open);
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary" />
+              Sticker Üretiliyor
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Progress Summary */}
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">İlerleme:</span>
+              <span className="font-bold">
+                {generationProgress.filter(p => p.status === 'done').length} / {generationProgress.length}
+              </span>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-300"
+                style={{
+                  width: `${(generationProgress.filter(p => p.status === 'done').length / generationProgress.length) * 100}%`
+                }}
+              />
+            </div>
+
+            {/* Individual Items Grid */}
+            <div className="grid grid-cols-5 gap-2 max-h-[200px] overflow-y-auto p-2 bg-muted/20 rounded-xl">
+              {generationProgress.map((item, idx) => (
+                <div
+                  key={idx}
+                  className={cn(
+                    "aspect-square rounded-lg flex items-center justify-center text-xs font-bold transition-all",
+                    item.status === 'pending' && "bg-muted/50 text-muted-foreground",
+                    item.status === 'generating' && "bg-primary/20 text-primary animate-pulse border-2 border-primary",
+                    item.status === 'done' && "bg-green-500/20 text-green-500",
+                    item.status === 'error' && "bg-red-500/20 text-red-500",
+                    item.status === 'cancelled' && "bg-gray-500/20 text-gray-500"
+                  )}
+                >
+                  {item.status === 'pending' && <span className="opacity-50">{idx + 1}</span>}
+                  {item.status === 'generating' && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {item.status === 'done' && <CheckCircle className="w-4 h-4" />}
+                  {item.status === 'error' && <X className="w-4 h-4" />}
+                  {item.status === 'cancelled' && <span className="opacity-50">-</span>}
+                </div>
+              ))}
+            </div>
+
+            {/* Current Status Text */}
+            <p className="text-center text-sm text-muted-foreground">
+              {bulkGenerating ? (
+                <>Sticker #{generationProgress.findIndex(p => p.status === 'generating') + 1} üretiliyor...</>
+              ) : (
+                <>Tamamlandı!</>
+              )}
+            </p>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            {bulkGenerating ? (
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  cancelGenerationRef.current = true;
+                  toast.info("Üretim durduruluyor...");
+                }}
+                className="w-full"
+              >
+                <X className="w-4 h-4 mr-2" />
+                Durdur
+              </Button>
+            ) : (
+              <Button onClick={() => setProgressModalOpen(false)} className="w-full">
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Tamam
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div >
   );
 }

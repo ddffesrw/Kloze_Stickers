@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Search, Bell, Sparkles, Flame, Clock } from "lucide-react";
+import { Search, Bell, Sparkles, Flame, Clock, Crown } from "lucide-react";
 import { TrendingCarousel } from "@/components/kloze/TrendingCarousel";
 import { CategoryPill } from "@/components/kloze/CategoryPill";
 import { PackCard } from "@/components/kloze/PackCard";
@@ -8,8 +8,10 @@ import { FloatingStickers } from "@/components/kloze/FloatingStickers";
 import { categories, allPacks } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { AdBanner } from "@/components/kloze/AdBanner";
-import { getTrendingPacks, getNewPacks, getUserLikedPackIds, toggleLike } from "@/services/stickerService";
-import { auth } from "@/lib/supabase";
+import { ComingSoonCard } from "@/components/kloze/ComingSoonCard";
+import { HeroBannerSlider } from "@/components/kloze/HeroBannerSlider";
+import { getTrendingStickerPacks, getNewStickerPacks, getUserLikedPackIds, togglePackLike } from "@/services/stickerPackService";
+import { auth, supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 
 export default function HomePage() {
@@ -19,14 +21,15 @@ export default function HomePage() {
   const [likedPackIds, setLikedPackIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [isPro, setIsPro] = useState(false);
 
   // 1. Fetch Real Data
   useEffect(() => {
     const loadData = async () => {
       try {
         const [trending, newP, user] = await Promise.all([
-          getTrendingPacks(),
-          getNewPacks(),
+          getTrendingStickerPacks(),
+          getNewStickerPacks(),
           auth.getCurrentUser()
         ]);
 
@@ -36,6 +39,14 @@ export default function HomePage() {
         if (user) {
           const likedIds = await getUserLikedPackIds(user.id);
           setLikedPackIds(likedIds);
+
+          // Check Pro status
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('is_pro')
+            .eq('id', user.id)
+            .single();
+          setIsPro(profile?.is_pro || false);
         }
       } catch (e) {
         console.error("Home data load error", e);
@@ -71,7 +82,7 @@ export default function HomePage() {
     setNewPacks(prev => updatePackCount(prev));
 
     // Call API
-    const result = await toggleLike(packId);
+    const result = await togglePackLike(packId);
     if (!result) {
       // Revert on error
       setLikedPackIds(likedPackIds);
@@ -132,43 +143,9 @@ export default function HomePage() {
       </header>
 
       <main className="relative z-10 space-y-8 pt-6">
-        {/* Hero Section - Compact */}
+        {/* Hero Banner Slider */}
         <div className="px-4">
-          <div className="relative overflow-hidden rounded-2xl p-4 mesh-gradient-intense border border-border/30">
-            {/* Decorative Elements */}
-            <div className="absolute top-0 right-0 w-24 h-24 bg-primary/30 rounded-full blur-3xl" />
-
-            <div className="relative z-10 flex items-center gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-primary/20 border border-primary/30 mb-2">
-                  <Sparkles className="w-3 h-3 text-primary" />
-                  <span className="text-[10px] font-semibold text-primary">AI Destekli</span>
-                </div>
-
-                <h2 className="text-lg font-black text-foreground leading-tight">
-                  Sticker'ını <span className="gradient-text">Üret</span>
-                </h2>
-
-                <Link
-                  to="/generate"
-                  className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-xl gradient-primary text-primary-foreground text-sm font-semibold glow-violet"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Başla
-                </Link>
-              </div>
-
-              {/* Floating Stickers */}
-              <div className="relative w-20 h-20 flex-shrink-0">
-                <div className="absolute top-0 right-0 w-10 h-10 animate-float rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 border border-border/30 flex items-center justify-center text-xl sticker-style">
-                  😍
-                </div>
-                <div className="absolute bottom-0 left-0 w-8 h-8 animate-float-delayed rounded-lg bg-gradient-to-br from-secondary/20 to-primary/20 border border-border/30 flex items-center justify-center text-lg sticker-style">
-                  🔥
-                </div>
-              </div>
-            </div>
-          </div>
+          <HeroBannerSlider />
         </div>
 
         {/* Tabs */}
@@ -255,11 +232,14 @@ export default function HomePage() {
 
                 {(index > 0 && (index + 1) % 6 === 0) && (
                   <div className="col-span-3 my-2">
-                    <AdBanner />
+                    <AdBanner isPro={isPro} />
                   </div>
                 )}
               </div>
             ))}
+
+            {/* Coming Soon Card at the end */}
+            <ComingSoonCard />
           </div>
 
           {filteredPacks.length === 0 && (
@@ -271,6 +251,13 @@ export default function HomePage() {
             </div>
           )}
         </div>
+
+        {/* Sticky Bottom Ad Banner - Only for free users */}
+        {!isPro && (
+          <div className="fixed bottom-20 left-4 right-4 z-30">
+            <AdBanner isPro={isPro} className="shadow-xl bg-background/90 backdrop-blur-md border-primary/20" />
+          </div>
+        )}
       </main>
     </div>
   );

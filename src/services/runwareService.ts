@@ -5,30 +5,80 @@
 
 import { Runware } from "@runware/sdk-js";
 
+// Type definitions for Runware SDK
+interface RunwareClient {
+  ensureConnection?: () => Promise<void>;
+  requestImages: (params: ImageRequestParams) => Promise<ImageResult[]>;
+  removeBackground: (params: BackgroundRemovalParams) => Promise<BackgroundRemovalResult>;
+}
+
+interface ImageRequestParams {
+  positivePrompt: string;
+  negativePrompt: string;
+  model: string;
+  width: number;
+  height: number;
+  numberResults: number;
+  outputFormat: string;
+  outputType: string;
+  seed: number;
+  steps: number;
+  CFGScale: number;
+}
+
+interface ImageResult {
+  imageURL: string;
+  seed?: number;
+  width?: number;
+  height?: number;
+}
+
+interface BackgroundRemovalParams {
+  inputImage: string;
+  outputFormat: string;
+  outputType: string;
+  rgba: number[];
+}
+
+interface BackgroundRemovalResult {
+  imageURL: string;
+}
+
 // Runware client management
-let runwareClient: any = null;
+let runwareClient: RunwareClient | null = null;
+
+/**
+ * Validate environment configuration at startup
+ */
+function validateConfig(): void {
+  const apiKey = import.meta.env.VITE_RUNWARE_API_KEY;
+  if (!apiKey && import.meta.env.PROD) {
+    console.error('[Runware] VITE_RUNWARE_API_KEY is not configured. Runware features will not work.');
+  }
+}
+
+// Validate on module load
+validateConfig();
 
 /**
  * Runware client'ı al veya oluştur.
  * Browser ortamında bağlantı kopmaları olabileceğinden, bağlantı durumunu garantiye alıyoruz.
  */
-async function getRunwareClient(): Promise<any> {
+async function getRunwareClient(): Promise<RunwareClient> {
   const apiKey = import.meta.env.VITE_RUNWARE_API_KEY;
-  if (!apiKey) throw new Error('VITE_RUNWARE_API_KEY bulunamadı');
+  if (!apiKey) throw new Error('VITE_RUNWARE_API_KEY bulunamadı. Lütfen .env dosyasını kontrol edin.');
 
   // Mevcut client varsa ve bağlıysa onu kullan
   if (runwareClient) {
-    // SDK'nın connectionState property'si varsa kontrol edebiliriz, 
-    // ancak en garantisi ensureConnection çağırmaktır.
     return runwareClient;
   }
 
   // Yeni client oluştur
   runwareClient = new Runware({
     apiKey,
-    url: "wss://ws-api.runware.ai/v1", // Explicit URL
-    timeoutDuration: 60000 // 60s connection timeout for slow responses
-  });
+    url: "wss://ws-api.runware.ai/v1",
+    timeoutDuration: 60000
+  }) as RunwareClient;
 
   return runwareClient;
 }
@@ -72,7 +122,7 @@ export async function generateSticker(
   const negativePrompt = options.negativePrompt ||
     'complex background, shadows, photo-realistic, gradient, textured background, blurry, watermark, 3d render, shadows, text, signature, multiple objects, cluttered';
 
-  const params: any = {
+  const params: ImageRequestParams = {
     positivePrompt: optimizedPrompt,
     negativePrompt, // Orijinal negative prompt geri yüklendi
     model: "runware:100@1", // Flux Schnell Short ID
@@ -86,7 +136,7 @@ export async function generateSticker(
     CFGScale: 1, // Flux için 1
   };
 
-  const performRequest = async (retryCount = 0): Promise<any> => {
+  const performRequest = async (retryCount = 0): Promise<ImageResult[]> => {
     try {
       console.log(`[Runware] Connecting (Attempt ${retryCount + 1})...`);
       // Bağlantıyı garantiye al

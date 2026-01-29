@@ -62,14 +62,14 @@ export function AvatarSelector({ currentAvatar, onAvatarChange, children }: Avat
       <SheetTrigger asChild>
         {children}
       </SheetTrigger>
-      <SheetContent side="bottom" className="h-[70vh] rounded-t-3xl bg-background border-border/30">
-        <SheetHeader className="pb-4">
+      <SheetContent side="bottom" className="h-[75vh] rounded-t-3xl bg-background border-border/30 overflow-hidden flex flex-col">
+        <SheetHeader className="pb-4 flex-shrink-0">
           <SheetTitle className="text-center text-lg font-bold gradient-text">
             Profil Resmini Seç
           </SheetTitle>
         </SheetHeader>
-        
-        <div className="space-y-6 overflow-y-auto pb-20">
+
+        <div className="flex-1 overflow-y-auto space-y-6 pb-24 px-1">
           {/* Female Avatars */}
           <div>
             <h3 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-2">
