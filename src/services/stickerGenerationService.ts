@@ -4,9 +4,12 @@
  */
 
 import { generateSticker, type GenerateStickerOptions } from './runwareService';
-import { generateStickerHF } from './huggingFaceService';
+import { generateStickerHF } from './forgeService';
+import { generateStickerDalle } from './openAiService';
 import { removeBackgroundWithRetry } from './backgroundRemovalService';
-import { supabase, storage } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
+import { storageService, BUCKETS } from './storageService';
+import { convertToWebP, createThumbnail } from '@/utils/imageUtils';
 
 export interface GenerationProgress {
   stage: 'generating' | 'removing_bg' | 'converting' | 'uploading' | 'complete';
@@ -24,119 +27,37 @@ export interface GeneratedStickerResult {
 }
 
 /**
- * WebP formatına çevir (512x512)
- */
-async function convertToWebP(blob: Blob): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d')!;
-
-    img.onload = () => {
-      // WhatsApp için kesinlikle 512x512
-      canvas.width = 512;
-      canvas.height = 512;
-
-      // Resmi ortala ve ölçeklendir
-      const scale = Math.max(512 / img.width, 512 / img.height);
-      const x = (512 - img.width * scale) / 2;
-      const y = (512 - img.height * scale) / 2;
-
-      ctx.clearRect(0, 0, 512, 512);
-      ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
-
-      // WebP olarak export (0.85 kalite = 100-200KB)
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            resolve(blob);
-          } else {
-            reject(new Error('WebP dönüşümü başarısız'));
-          }
-        },
-        'image/webp',
-        0.85
-      );
-    };
-
-    img.onerror = reject;
-    img.src = URL.createObjectURL(blob);
-  });
-}
-
-/**
- * Thumbnail oluştur (128x128 WebP)
- */
-async function createThumbnail(blob: Blob): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d')!;
-
-    img.onload = () => {
-      canvas.width = 128;
-      canvas.height = 128;
-
-      const scale = Math.max(128 / img.width, 128 / img.height);
-      const x = (128 - img.width * scale) / 2;
-      const y = (128 - img.height * scale) / 2;
-
-      ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
-
-      canvas.toBlob(
-        (blob) => blob ? resolve(blob) : reject(new Error('Thumbnail oluşturulamadı')),
-        'image/webp',
-        0.7
-      );
-    };
-
-    img.onerror = reject;
-    img.src = URL.createObjectURL(blob);
-  });
-}
-
-/**
- * Supabase'e yükle
- */
-async function uploadToSupabase(
-  blob: Blob,
-  userId: string,
-  fileName: string,
-  bucket: string = 'stickers'
-): Promise<string> {
-  const filePath = `${userId}/${Date.now()}_${fileName}`;
-
-  await storage.upload(bucket, filePath, blob);
-
-  return storage.getPublicUrl(bucket, filePath);
-}
-
-/**
  * TAM PIPELINE: AI Generation → BG Removal → WebP → Supabase
  */
 export async function generateAndUploadSticker(
   prompt: string,
   userId: string,
   options?: Partial<GenerateStickerOptions>,
+  removeBg: boolean = true,
   onProgress?: (progress: GenerationProgress) => void,
-  provider: 'runware' | 'huggingface' = 'runware'
+  provider: 'runware' | 'huggingface' | 'dalle' = 'runware'
 ): Promise<GeneratedStickerResult> {
   try {
-    // 0. Kredi Kontrolü
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('credits')
-      .eq('id', userId)
-      .single();
+    // 0. Kredi Kontrolü (RPC ile - RLS Bypass)
+    const { data: creditAmount, error: creditError } = await supabase.rpc('get_user_credits');
 
-    if (userError || !userData) throw new Error("Kullanıcı bilgisi alınamadı");
-    if ((userData.credits || 0) < 1) throw new Error("Yetersiz kredi! Lütfen kredi yükleyin.");
+    if (creditError) {
+      console.error("Credit check failed:", creditError);
+      throw new Error("Kredi bilgisi alınamadı");
+    }
+
+    // Cost Logic: HF=1, Runware=3, Dalle=5
+    let requiredCredits = 1; // Default HF
+    if (provider === 'runware') requiredCredits = 3;
+    if (provider === 'dalle') requiredCredits = 5;
+
+    if ((creditAmount || 0) < requiredCredits) throw new Error(`Yetersiz kredi! Bu işlem için ${requiredCredits} kredi gerekiyor.`);
 
     // 1. AI ile görsel üret
     onProgress?.({
       stage: 'generating',
       progress: 10,
-      message: provider === 'huggingface' ? 'Ücretsiz sunucuda üretiliyor...' : 'Hızlı sunucuda üretiliyor...'
+      message: provider === 'huggingface' ? 'Ücretsiz sunucuda üretiliyor...' : 'Yüksek kalite üretiliyor...'
     });
 
     let generated;
@@ -145,6 +66,8 @@ export async function generateAndUploadSticker(
         prompt,
         ...options
       });
+    } else if (provider === 'dalle') {
+      generated = await generateStickerDalle(prompt);
     } else {
       generated = await generateSticker({
         prompt,
@@ -158,20 +81,50 @@ export async function generateAndUploadSticker(
       message: 'Görsel üretildi!'
     });
 
+
     // 2. Arka planı sil
-    onProgress?.({
-      stage: 'removing_bg',
-      progress: 40,
-      message: 'Arka plan siliniyor...'
-    });
+    let transparentBlob: Blob;
 
-    const transparentBlob = await removeBackgroundWithRetry(generated.imageURL);
+    if (removeBg) {
+      onProgress?.({
+        stage: 'removing_bg',
+        progress: 40,
+        message: 'Arka plan siliniyor...'
+      });
 
-    onProgress?.({
-      stage: 'removing_bg',
-      progress: 60,
-      message: 'Arka plan silindi!'
-    });
+      try {
+        // Option 1: Try HF if provider was HF (or always try it first?)
+        // Let's try local first as it's faster usually? Or HF as requested?
+        // User asked for HF research. Let's try it.
+        // Actually, stick to local @imgly as default for speed/privacy, 
+        // but since user specifically asked "research HF for BG", let's hook it up.
+        // Since we don't have a verified HF model returning image (RMBG returns masks often),
+        // let's keep using the FIXED local one as primary for now to ensure stability.
+
+        transparentBlob = await removeBackgroundWithRetry(generated.imageURL);
+
+      } catch (bgError) {
+        console.error("Local BG removal failed, trying fallback...", bgError);
+        // Fallback logic could go here
+        throw bgError;
+      }
+
+      onProgress?.({
+        stage: 'removing_bg',
+        progress: 60,
+        message: 'Arka plan silindi!'
+      });
+    } else {
+      // Skip removal, fetch original image as blob if needed
+      onProgress?.({
+        stage: 'removing_bg',
+        progress: 50,
+        message: 'Arka plan silme atlanıyor...'
+      });
+
+      const response = await fetch(generated.imageURL);
+      transparentBlob = await response.blob();
+    }
 
     // 3. WebP formatına çevir (512x512)
     onProgress?.({
@@ -198,10 +151,15 @@ export async function generateAndUploadSticker(
       message: 'Supabase\'e yükleniyor...'
     });
 
-    const [imageUrl, thumbnailUrl] = await Promise.all([
-      uploadToSupabase(webpBlob, userId, 'sticker.webp', 'stickers'),
-      uploadToSupabase(thumbnailBlob, userId, 'thumb.webp', 'thumbnails')
-    ]);
+    // Parallel upload
+    const uploadPromises = [
+      storageService.upload(BUCKETS.STICKERS, `${userId}/${Date.now()}_sticker.webp`, webpBlob),
+      storageService.upload(BUCKETS.THUMBNAILS, `${userId}/${Date.now()}_thumb.webp`, thumbnailBlob)
+    ];
+
+    const [stickerUpload, thumbUpload] = await Promise.all(uploadPromises);
+    const imageUrl = stickerUpload.publicUrl;
+    const thumbnailUrl = thumbUpload.publicUrl;
 
     onProgress?.({
       stage: 'complete',
@@ -225,7 +183,9 @@ export async function generateAndUploadSticker(
     });
 
     // 7. Kredi Düş
-    await supabase.rpc('deduct_credits', { amount: 1 });
+    if (requiredCredits > 0) {
+      await supabase.rpc('deduct_credits', { amount: requiredCredits });
+    }
 
     return {
       id: stickerId,
@@ -258,6 +218,7 @@ export async function generateMultipleStickers(
         prompts[i],
         userId,
         undefined,
+        true, // Batch default removeBg=true for now
         (progress) => onProgress?.(i + 1, prompts.length, progress),
         'runware' // Batch şimdilik sadece Runware
       );
@@ -276,6 +237,7 @@ export async function generateMultipleStickers(
  * Estimate Generation Cost
  * Provider'a göre maliyet hesabı (Temsili)
  */
-export function estimateCost(provider: 'runware' | 'huggingface'): number {
+export function estimateCost(provider: 'runware' | 'huggingface' | 'dalle'): number {
+  if (provider === 'dalle') return 0.08; // ~$0.08 for HD
   return provider === 'runware' ? 0.02 : 0.00; // $0.02 vs Free
 }

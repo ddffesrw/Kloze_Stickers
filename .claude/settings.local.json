@@ -3,7 +3,11 @@
     "allow": [
       "Bash(npm install @supabase/supabase-js @runware/sdk-js)",
       "Bash(npm run dev:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx eslint:*)",
+      "Bash(npm install:*)"
     ]
   }
 }

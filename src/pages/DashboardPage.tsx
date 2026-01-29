@@ -5,6 +5,7 @@ import { BarChart, DollarSign, Image as ImageIcon, Users, Lock } from "lucide-re
 import { estimateCost } from "@/services/stickerGenerationService";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { BulkGenerator } from "@/components/admin/BulkGenerator";
 
 const ADMIN_EMAIL = "johnaxe.storage@gmail.com";
 
@@ -35,7 +36,7 @@ export default function DashboardPage() {
                 .select('*', { count: 'exact', head: true });
 
             const { count: userCount } = await supabase
-                .from('users')
+                .from('profiles')
                 .select('*', { count: 'exact', head: true });
 
             const total = stickerCount || 0;
@@ -100,6 +101,11 @@ export default function DashboardPage() {
                     </div>
                     <p className="text-3xl font-black text-foreground">{stats.userCount}</p>
                 </div>
+            </div>
+
+            {/* Bulk Generator */}
+            <div className="mt-8">
+                <BulkGenerator />
             </div>
 
             {/* Profit Calculator */}

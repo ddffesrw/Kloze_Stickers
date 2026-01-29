@@ -11,7 +11,7 @@ import {
 } from '@/services/stickerGenerationService';
 
 export interface UseStickerGenerationReturn {
-  generate: (prompt: string, provider?: 'runware' | 'huggingface') => Promise<GeneratedStickerResult | null>;
+  generate: (prompt: string, provider?: 'runware' | 'huggingface' | 'dalle', removeBg?: boolean) => Promise<GeneratedStickerResult | null>;
   isGenerating: boolean;
   progress: GenerationProgress | null;
   error: string | null;
@@ -26,8 +26,8 @@ export function useStickerGeneration(userId: string): UseStickerGenerationReturn
   const [progress, setProgress] = useState<GenerationProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [credits, setCredits] = useState(0);
-  const [hasEnoughCredits, setHasEnoughCredits] = useState(false);
+  const [credits, setCredits] = useState<number | null>(null); // null = loading
+  const [hasEnoughCredits, setHasEnoughCredits] = useState(true); // Default true to prevent flash
 
   /**
    * Credit'leri yenile
@@ -35,15 +35,13 @@ export function useStickerGeneration(userId: string): UseStickerGenerationReturn
   const refreshCredits = useCallback(async () => {
     if (!userId) return;
 
-    const { data, error } = await supabase
-      .from('users')
-      .select('credits')
-      .eq('id', userId)
-      .single();
+    // Use RPC to avoid 403/RLS issues
+    const { data: creditBalance, error } = await supabase.rpc('get_user_credits');
 
-    if (!error && data) {
-      setCredits(data.credits);
-      setHasEnoughCredits((data.credits || 0) > 0);
+    if (!error) {
+      const balance = creditBalance || 0;
+      setCredits(balance);
+      setHasEnoughCredits(balance > 0);
     }
   }, [userId]);
 
@@ -57,21 +55,24 @@ export function useStickerGeneration(userId: string): UseStickerGenerationReturn
    */
   const generate = useCallback(async (
     prompt: string,
-    provider: 'runware' | 'huggingface' = 'runware'
+    provider: 'runware' | 'huggingface' | 'dalle' = 'runware',
+    removeBg: boolean = true
   ): Promise<GeneratedStickerResult | null> => {
     setIsGenerating(true);
     setError(null);
     setProgress(null);
 
     try {
-      if (provider === 'runware' && credits < 1) {
-        throw new Error('Yetersiz kredi');
+      const requiredCredits = provider === 'dalle' ? 5 : (provider === 'runware' ? 1 : 0);
+      if (credits < requiredCredits) {
+        throw new Error(`Yetersiz kredi. Bu işlem ${requiredCredits} kredi gerektirir.`);
       }
 
       const result = await generateAndUploadSticker(
         prompt,
         userId,
         undefined,
+        removeBg,
         (prog) => setProgress(prog),
         provider
       );

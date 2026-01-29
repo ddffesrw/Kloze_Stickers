@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { auth } from '@/lib/supabase';
@@ -10,14 +10,14 @@ export function useUserCredits() {
         const user = await auth.getCurrentUser();
         if (!user) return 0;
 
-        const { data, error } = await supabase
-            .from('users')
-            .select('credits')
-            .eq('id', user.id)
-            .single();
+        // Use RPC to avoid 403 on direct table access
+        const { data, error } = await supabase.rpc('get_user_credits');
 
-        if (error) throw error;
-        return data?.credits || 0;
+        if (error) {
+            console.error('Error fetching credits:', error);
+            return 0;
+        }
+        return data || 0;
     };
 
     const { data: credits = 0, isLoading, refetch } = useQuery({
@@ -25,38 +25,23 @@ export function useUserCredits() {
         queryFn: fetchCredits
     });
 
-    // Realtime Listener
+    // Realtime Listener (Optional: might still fail on 'users' table if RLS blocks SUBSCRIPTION)
+    // If getting 403 on subscription, better to rely on manual invalidation or a different trigger.
+    // For now, let's keep it simple and invalidation-based from actions.
+    // If strict RLS blocks 'users' select, it probably blocks 'users' subscription too.
+    // We will comment out the realtime part for 'users' table to avoid console errors,
+    // relying on 'invalidateCredits' called after generation/purchase.
+
+    /* 
     useEffect(() => {
-        let channel: ReturnType<typeof supabase.channel> | null = null;
-
-        const setupRealtime = async () => {
-            const user = await auth.getCurrentUser();
-            if (!user) return;
-
-            channel = supabase
-                .channel('credit-updates')
-                .on(
-                    'postgres_changes',
-                    {
-                        event: 'UPDATE',
-                        schema: 'public',
-                        table: 'users',
-                        filter: `id=eq.${user.id}`
-                    },
-                    (payload) => {
-                        console.log('Credit update received:', payload);
-                        queryClient.invalidateQueries({ queryKey: ['userCredits'] });
-                    }
-                )
-                .subscribe();
-        };
-
-        setupRealtime();
-
-        return () => {
-            if (channel) supabase.removeChannel(channel);
-        };
-    }, [queryClient]);
+        const channel = supabase.channel('credit-updates')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
+                queryClient.invalidateQueries({ queryKey: ['userCredits'] });
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [queryClient]); 
+    */
 
     const invalidateCredits = () => {
         queryClient.invalidateQueries({ queryKey: ['userCredits'] });

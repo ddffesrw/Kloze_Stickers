@@ -193,20 +193,30 @@ export const currentUser: User = {
 };
 
 export const aiStyles = [
-  { id: "3d", name: "3D Render", icon: "🎲", description: "Gerçekçi 3D görünüm", prompt: "3D rendered, photorealistic" },
-  { id: "anime", name: "Anime", icon: "🌸", description: "Japon çizgi film tarzı", prompt: "anime style, manga art" },
-  { id: "minimalist", name: "Minimalist", icon: "◯", description: "Sade ve şık", prompt: "minimalist, simple, clean design" },
-  { id: "vector", name: "Vector", icon: "✏️", description: "Düz renkli illüstrasyon", prompt: "vector art, flat colors" },
-  { id: "kawaii", name: "Kawaii", icon: "🧸", description: "Sevimli Japon stili", prompt: "kawaii, cute, adorable" },
-  { id: "pixel", name: "Pixel Art", icon: "🕹️", description: "Retro oyun grafikleri", prompt: "pixel art, 8-bit, retro game" },
-  { id: "watercolor", name: "Sulu Boya", icon: "🎨", description: "Sanatsal ve yumuşak", prompt: "watercolor painting, artistic" },
-  { id: "neon", name: "Neon", icon: "💡", description: "Parlak cyberpunk", prompt: "neon lights, glowing, vibrant colors" },
-  { id: "cartoon", name: "Cartoon", icon: "🎬", description: "Çizgi film karakteri", prompt: "cartoon style, animated" },
-  { id: "sketch", name: "Sketch", icon: "✍️", description: "El çizimi görünümü", prompt: "hand drawn sketch, pencil art" },
-  { id: "tribal", name: "Tribal", icon: "🗿", description: "Etnik desenler", prompt: "tribal art, ethnic patterns, indigenous" },
-  { id: "illusion", name: "Illusion", icon: "👁️", description: "Optik illüzyon", prompt: "optical illusion, trippy, mind-bending" },
-  { id: "psychedelic", name: "Psychedelic", icon: "🍄", description: "Renkli halüsinasyon", prompt: "psychedelic, hallucinogenic, colorful swirls" },
-  { id: "pop-art", name: "Pop Art", icon: "🖼️", description: "Renkli ve cesur", prompt: "pop art, bold colors, comic style" },
+  { id: "3d", name: "3D Render", icon: "🎲", description: "Gerçekçi 3D görünüm", prompt: "3D rendered cgi, cute, isometric, glossy finish, octane render, blender style, soft lighting" },
+  { id: "anime", name: "Anime", icon: "🌸", description: "Japon çizgi film tarzı", prompt: "anime style, manga art, vibrant colors, expressive eyes, cel shaded, studio ghibli style" },
+  { id: "minimalist", name: "Minimalist", icon: "◯", description: "Sade ve şık", prompt: "minimalist, simple, clean lines, flat design, less details, modern art" },
+  { id: "vector", name: "Vector", icon: "✏️", description: "Düz renkli illüstrasyon", prompt: "vector art, adobe illustrator, flat colors, bold lines, clean shapes, svg style" },
+  { id: "kawaii", name: "Kawaii", icon: "🧸", description: "Sevimli Japon stili", prompt: "kawaii, cute, pastel colors, adorable, chibi proportions, soft look" },
+  { id: "pixel", name: "Pixel Art", icon: "🕹️", description: "Retro oyun grafikleri", prompt: "pixel art, 8-bit, retro game sprite, low res, dot art" },
+  { id: "watercolor", name: "Sulu Boya", icon: "🎨", description: "Sanatsal ve yumuşak", prompt: "watercolor painting, artistic, wet brush, soft edges, pastel tones, fluid" },
+  { id: "neon", name: "Neon", icon: "💡", description: "Parlak cyberpunk", prompt: "neon lights, glowing, vibrant colors, dark background contrast, synthwave" },
+  { id: "cartoon", name: "Cartoon", icon: "🎬", description: "Çizgi film karakteri", prompt: "cartoon style, disney style, energetic, bold outlines, exaggerated features" },
+  { id: "sketch", name: "Sketch", icon: "✍️", description: "El çizimi görünümü", prompt: "hand drawn sketch, pencil art, graphite, rough lines, charcoal style" },
+  { id: "tribal", name: "Tribal", icon: "🗿", description: "Etnik desenler", prompt: "tribal art, ethnic patterns, indigenous style, tattoo art, monochrome" },
+  { id: "illusion", name: "Illusion", icon: "👁️", description: "Optik illüzyon", prompt: "optical illusion, trippy, mind-bending, geometric patterns, surreal" },
+  { id: "psychedelic", name: "Psychedelic", icon: "🍄", description: "Renkli halüsinasyon", prompt: "psychedelic, hallucinogenic, colorful swirls, lsd art, intricate details" },
+  { id: "pop-art", name: "Pop Art", icon: "🖼️", description: "Renkli ve cesur", prompt: "pop art, andy warhol style, halftone dots, bold colors, comic book style" },
+  { id: "chibi", name: "Chibi", icon: "🎀", description: "Minik sevimli karakter", prompt: "chibi style, super deformed, cute big head, small body, expressive" },
+  { id: "vaporwave", name: "Vaporwave", icon: "🌴", description: "Retro estetik", prompt: "vaporwave aesthetic, retro 80s, pink purple gradient, glitch art, nostalgic" },
+  { id: "steampunk", name: "Steampunk", icon: "⚙️", description: "Viktorya mekanik", prompt: "steampunk style, gears, brass, leather, victorian mechanical, vintage sci-fi" },
+  { id: "cyberpunk", name: "Cyberpunk", icon: "🤖", description: "Fütüristik şehir", prompt: "cyberpunk style, futuristic, neon city, high tech, cyborg elements, robotic" },
+  { id: "origami", name: "Origami", icon: "🦢", description: "Kağıt katlama sanatı", prompt: "origami style, paper folding, geometric paper art, sharp edges, paper texture" },
+  { id: "stained-glass", name: "Vitray", icon: "🪟", description: "Cam mozaik", prompt: "stained glass style, mosaic, colorful glass panels, black outlines, church window" },
+  { id: "graffiti", name: "Graffiti", icon: "🎤", description: "Sokak sanatı", prompt: "graffiti art, street art, spray paint, urban style, drip effect, bold letters" },
+  { id: "clay", name: "Clay 3D", icon: "🏺", description: "Kil heykel", prompt: "clay sculpture, plasticine, 3D clay art, soft rounded, stop motion style, playdoh" },
+  { id: "lowpoly", name: "Low Poly", icon: "💎", description: "Geometrik 3D", prompt: "low poly 3D, geometric polygons, faceted design, sharp edges, minimalist 3d" },
+  { id: "emoji", name: "Emoji", icon: "😊", description: "Emoji tarzı", prompt: "emoji style, emoticon, simple expressive face, round, ios emoji style" },
 ];
 
 export const adminStats = {
@@ -216,3 +226,211 @@ export const adminStats = {
   newUsersToday: 45,
   generationsToday: 890,
 };
+
+/**
+ * Prompt Modifiers - SDXL & Pony Optimized Technical Keywords
+ * Each modifier adds professional quality enhancers to the prompt
+ */
+export const promptModifiers: Record<string, { label: string; icon: string; keywords: string }> = {
+  ultraDetail: {
+    label: "Ultra Detay",
+    icon: "🔬",
+    keywords: "ultra detailed, intricate details, highly detailed, 8k uhd, sharp focus"
+  },
+  cinematic: {
+    label: "Sinematik",
+    icon: "🎬",
+    keywords: "cinematic lighting, dramatic lighting, volumetric lighting, film grain, movie scene"
+  },
+  masterpiece: {
+    label: "Başyapıt",
+    icon: "🏆",
+    keywords: "masterpiece, best quality, award winning, professional, trending on artstation"
+  },
+  vibrant: {
+    label: "Canlı Renkler",
+    icon: "🌈",
+    keywords: "vibrant colors, vivid, saturated, colorful, rich colors, dynamic range"
+  },
+  softLight: {
+    label: "Yumuşak Işık",
+    icon: "🌤️",
+    keywords: "soft lighting, ambient light, diffused light, gentle shadows, natural lighting"
+  },
+  sharpFocus: {
+    label: "Net Odak",
+    icon: "🎯",
+    keywords: "sharp focus, in focus, crisp, clear, high resolution, defined edges"
+  },
+  composition: {
+    label: "Kompozisyon",
+    icon: "📐",
+    keywords: "perfect composition, rule of thirds, balanced, well framed, centered subject"
+  },
+  texture: {
+    label: "Doku",
+    icon: "🧱",
+    keywords: "detailed texture, realistic texture, tactile, surface detail, material definition"
+  },
+  smooth: {
+    label: "Pürüzsüz",
+    icon: "✨",
+    keywords: "smooth, polished, clean render, no noise, flawless, pristine"
+  },
+  depth: {
+    label: "Derinlik",
+    icon: "🌊",
+    keywords: "depth of field, bokeh, 3d depth, layered, dimensional, perspective"
+  }
+};
+
+/**
+ * Generates the final prompt by combining user input with selected modifiers
+ * Does NOT include style - that's handled separately
+ * 
+ * @param userPrompt - The base prompt written by the user
+ * @param selectedModifiers - Array of modifier keys to apply (e.g., ["ultraDetail", "cinematic"])
+ * @returns Combined prompt string
+ */
+export function generateFinalPrompt(
+  userPrompt: string,
+  selectedModifiers: string[]
+): string {
+  if (!userPrompt.trim()) return "";
+
+  // Collect keywords from selected modifiers
+  const modifierKeywords = selectedModifiers
+    .filter(key => promptModifiers[key])
+    .map(key => promptModifiers[key].keywords)
+    .join(", ");
+
+  // Combine: User Prompt + Modifier Keywords
+  // Style is added separately in the generation function
+  if (modifierKeywords) {
+    return `${userPrompt.trim()}, ${modifierKeywords}`;
+  }
+
+  return userPrompt.trim();
+}
+
+/**
+ * Turkish to English Word Dictionary for Prompt Translation
+ * Used for translating Turkish sticker prompts to English for Stable Diffusion
+ */
+export const turkishToEnglish: Record<string, string> = {
+  // Animals / Hayvanlar
+  "kedi": "cat", "kediler": "cats", "yavru kedi": "kitten",
+  "köpek": "dog", "köpekler": "dogs", "yavru köpek": "puppy",
+  "kuş": "bird", "kuşlar": "birds", "papağan": "parrot",
+  "tavşan": "rabbit", "tavşanlar": "rabbits",
+  "ayı": "bear", "panda": "panda", "kutup ayısı": "polar bear",
+  "aslan": "lion", "kaplan": "tiger", "fil": "elephant",
+  "zürafa": "giraffe", "maymun": "monkey", "goril": "gorilla",
+  "balık": "fish", "köpek balığı": "shark", "yunus": "dolphin",
+  "kelebek": "butterfly", "arı": "bee", "uğur böceği": "ladybug",
+  "baykuş": "owl", "kartal": "eagle", "penguen": "penguin",
+  "fare": "mouse", "hamster": "hamster", "sincap": "squirrel",
+  "tilki": "fox", "kurt": "wolf", "geyik": "deer",
+  "inek": "cow", "domuz": "pig", "at": "horse", "eşek": "donkey",
+  "koyun": "sheep", "keçi": "goat", "tavuk": "chicken", "ördek": "duck",
+  "ejderha": "dragon", "unicorn": "unicorn", "dinozor": "dinosaur",
+
+  // Colors / Renkler
+  "kırmızı": "red", "mavi": "blue", "yeşil": "green", "sarı": "yellow",
+  "turuncu": "orange", "mor": "purple", "pembe": "pink", "siyah": "black",
+  "beyaz": "white", "gri": "gray", "kahverengi": "brown", "altın": "gold",
+  "gümüş": "silver", "turkuaz": "turquoise", "lacivert": "navy blue",
+  "bordo": "burgundy", "bej": "beige", "krem": "cream",
+  "pastel": "pastel", "neon": "neon", "parlak": "bright", "mat": "matte",
+
+  // Emotions / Duygular
+  "mutlu": "happy", "üzgün": "sad", "kızgın": "angry", "şaşkın": "surprised",
+  "korkuluş": "scared", "heyecanlı": "excited", "yorgun": "tired",
+  "uykulu": "sleepy", "aşık": "in love", "sevimli": "cute", "komik": "funny",
+  "cool": "cool", "havalı": "cool", "sinirli": "annoyed", "meraklı": "curious",
+  "şaşırmış": "shocked", "gülümseyen": "smiling", "ağlayan": "crying",
+  "gülen": "laughing", "dans eden": "dancing", "uyuyan": "sleeping",
+
+  // Objects / Nesneler
+  "kalp": "heart", "yıldız": "star", "ay": "moon", "güneş": "sun",
+  "gökkuşağı": "rainbow", "bulut": "cloud", "yağmur": "rain", "kar": "snow",
+  "çiçek": "flower", "gül": "rose", "papatya": "daisy", "lale": "tulip",
+  "ağaç": "tree", "yaprak": "leaf", "orman": "forest",
+  "dağ": "mountain", "deniz": "sea", "okyanus": "ocean", "nehir": "river",
+  "ev": "house", "kale": "castle", "şehir": "city", "köy": "village",
+  "araba": "car", "uçak": "airplane", "gemi": "ship", "roket": "rocket",
+  "balon": "balloon", "şeker": "candy", "pasta": "cake", "dondurma": "ice cream",
+  "pizza": "pizza", "hamburger": "hamburger", "kahve": "coffee", "çay": "tea",
+  "kitap": "book", "kalem": "pencil", "bilgisayar": "computer", "telefon": "phone",
+  "müzik": "music", "gitar": "guitar", "piyano": "piano", "davul": "drums",
+  "top": "ball", "oyun": "game", "oyuncak": "toy",
+  "taç": "crown", "elmas": "diamond", "hazine": "treasure",
+  "sihir": "magic", "büyü": "spell", "peri": "fairy", "cadı": "witch",
+  "hayalet": "ghost", "vampir": "vampire", "zombi": "zombie", "canavar": "monster",
+  "robot": "robot", "uzaylı": "alien", "ninja": "ninja", "korsan": "pirate",
+  "prenses": "princess", "prens": "prince", "kral": "king", "kraliçe": "queen",
+  "şövalye": "knight", "kahraman": "hero", "süper kahraman": "superhero",
+
+  // Adjectives / Sıfatlar
+  "büyük": "big", "küçük": "small", "dev": "giant", "minik": "tiny",
+  "uzun": "tall", "kısa": "short", "şişman": "fat", "zayıf": "thin",
+  "güzel": "beautiful", "yakışıklı": "handsome", "çirkin": "ugly",
+  "tatlı": "sweet", "acı": "bitter", "ekşi": "sour", "tuzlu": "salty",
+  "sıcak": "hot", "soğuk": "cold", "ılık": "warm",
+  "hızlı": "fast", "yavaş": "slow", "güçlü": "strong", "güçsüz": "weak",
+  "yumuşak": "soft", "sert": "hard", "pürüzsüz": "smooth", "pürüzlü": "rough",
+  "eski": "old", "yeni": "new", "modern": "modern", "antik": "ancient",
+  "kabarık": "fluffy", "tüylü": "furry", "parlayan": "glowing", "ışıldayan": "sparkling",
+
+  // Actions / Eylemler
+  "koşan": "running", "yürüyen": "walking", "atlayan": "jumping",
+  "uçan": "flying", "yüzen": "swimming", "oturan": "sitting",
+  "ayakta": "standing", "yatan": "lying", "tırmanan": "climbing",
+  "yemek yiyen": "eating", "içen": "drinking", "oynayan": "playing",
+  "çalışan": "working", "okuyan": "reading", "yazan": "writing",
+  "şarkı söyleyen": "singing", "dans yapan": "dancing", "çizen": "drawing",
+  "savaşan": "fighting", "koruyan": "protecting", "kucaklayan": "hugging",
+
+  // Styles / Stiller
+  "kawaii": "kawaii", "anime": "anime", "manga": "manga",
+  "gerçekçi": "realistic", "karikatür": "cartoon", "çizgi film": "cartoon",
+  "pixel": "pixel art", "3d": "3d", "2d": "2d",
+  "suluboya": "watercolor", "yağlı boya": "oil painting", "karakalem": "pencil sketch",
+  "dijital": "digital art", "minimalist": "minimalist", "retro": "retro", "vintage": "vintage",
+
+  // Common phrases / Yaygın ifadeler
+  "bir": "a", "bir tane": "one", "iki": "two", "üç": "three",
+  "çok": "very", "fazla": "much", "az": "little", "biraz": "some",
+  "ve": "and", "ile": "with", "veya": "or", "ama": "but",
+  "üzerinde": "on", "altında": "under", "içinde": "inside", "dışında": "outside",
+  "önünde": "in front of", "arkasında": "behind", "yanında": "next to",
+  "gibi": "like", "olarak": "as", "için": "for",
+  "arka plan": "background", "ön plan": "foreground",
+  "beyaz arka plan": "white background", "şeffaf arka plan": "transparent background",
+  "basit": "simple", "karmaşık": "complex", "detaylı": "detailed",
+};
+
+/**
+ * Translates Turkish prompt to English using word matching
+ * Preserves English words and only translates Turkish ones
+ * 
+ * @param turkishPrompt - The prompt in Turkish
+ * @returns English translated prompt
+ */
+export function translatePrompt(turkishPrompt: string): string {
+  if (!turkishPrompt.trim()) return "";
+
+  let result = turkishPrompt.toLowerCase();
+
+  // Sort by length descending to match longer phrases first
+  const sortedEntries = Object.entries(turkishToEnglish)
+    .sort((a, b) => b[0].length - a[0].length);
+
+  for (const [turkish, english] of sortedEntries) {
+    // Use word boundary matching to avoid partial replacements
+    const regex = new RegExp(`\\b${turkish}\\b`, 'gi');
+    result = result.replace(regex, english);
+  }
+
+  return result;
+}

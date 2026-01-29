@@ -8,7 +8,11 @@ import { cn } from "@/lib/utils";
 import { AvatarSelector } from "@/components/kloze/AvatarSelector";
 import { auth } from "@/lib/supabase";
 import defaultAvatar from "@/assets/avatars/male-1.png";
-import { getAllUserStickers, deleteSticker, getUserPacks, getUserStats, deletePack, type Sticker, type StickerPack } from "@/services/stickerService";
+import { getAllUserStickers, deleteSticker, getUserStats, addStickersToPack, type Sticker } from "@/services/stickerService";
+
+import { getUserPacks, deleteStickerPack as deletePack, createStickerPack, getLikedPacks, removeStickerFromPack, addStickersToExistingPack, updatePackCover, getStickerPackById, type StickerPack } from "@/services/stickerPackService";
+import { PackCard } from "@/components/kloze/PackCard";
+import { PackSelectorModal } from "@/components/kloze/PackSelectorModal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +22,13 @@ import {
 import { downloadWhatsAppPack } from "@/services/whatsappService";
 import { toast } from "sonner";
 import { AdBanner } from "@/components/kloze/AdBanner";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Plus, X, Image as ImageIcon } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import { monetizationService } from "@/services/monetizationService";
 import { PurchasesPackage } from "@revenuecat/purchases-capacitor";
@@ -31,6 +41,7 @@ export default function ProfilePage() {
   const [currentEmail, setCurrentEmail] = useState<string>("");
   const [stickers, setStickers] = useState<Sticker[]>([]);
   const [packs, setPacks] = useState<StickerPack[]>([]);
+  const [likedPacks, setLikedPacks] = useState<StickerPack[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { credits, isLoading: creditsLoading } = useUserCredits();
   const [statsData, setStatsData] = useState({
@@ -49,6 +60,17 @@ export default function ProfilePage() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Pack Selector Modal State
+  const [showPackModal, setShowPackModal] = useState(false);
+  const [isPackLoading, setIsPackLoading] = useState(false);
+
+  // Pack Edit Modal State
+  const [editingPack, setEditingPack] = useState<StickerPack | null>(null);
+  const [packEditModalOpen, setPackEditModalOpen] = useState(false);
+  const [packEditStickers, setPackEditStickers] = useState<Sticker[]>([]);
+  const [availableStickers, setAvailableStickers] = useState<Sticker[]>([]);
+  const [editLoading, setEditLoading] = useState(false);
+
 
 
   // ... helpers ...
@@ -64,7 +86,18 @@ export default function ProfilePage() {
         const offerings = await monetizationService.getOfferings().catch(() => []);
         setPackages(offerings);
 
-        const proStatus = await monetizationService.checkProStatus().catch(() => false);
+        // Check Pro status from RevenueCat first, then fallback to database
+        let proStatus = await monetizationService.checkProStatus().catch(() => false);
+
+        // If RevenueCat says not pro, also check database (for admin-granted pro)
+        if (!proStatus) {
+          const user = await auth.getCurrentUser();
+          if (user) {
+            const { data: profile } = await supabase.from('profiles').select('is_pro').eq('id', user.id).single();
+            proStatus = profile?.is_pro || false;
+          }
+        }
+
         setIsPro(proStatus);
 
         const user = await auth.getCurrentUser();
@@ -80,14 +113,16 @@ export default function ProfilePage() {
             // const userCredits = profile?.credits || 0;
             // setCredits(userCredits);
 
-            const [stickersData, packsData, stats] = await Promise.all([
+            const [stickersData, packsData, stats, likedData] = await Promise.all([
               getAllUserStickers(user.id),
               getUserPacks(user.id),
-              getUserStats(user.id)
+              getUserStats(user.id),
+              getLikedPacks(user.id)
             ]);
             setStickers(stickersData);
             setPacks(packsData);
             setStatsData(stats);
+            setLikedPacks(likedData);
           } catch (innerError) {
             console.error("Data fetch error details:", innerError);
             toast.error("Bazı veriler yüklenemedi.");
@@ -181,6 +216,181 @@ export default function ProfilePage() {
     }
   };
 
+  /**
+   * Add selected stickers to an existing pack
+   */
+  const handleAddToPack = async (packId: string) => {
+    setIsPackLoading(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await addStickersToPack(packId, ids);
+
+      // Update local state - mark stickers as packed
+      setStickers(prev =>
+        prev.map(s =>
+          selectedIds.has(s.id) ? { ...s, pack_id: packId } : s
+        )
+      );
+
+      // Refresh packs to show updated sticker counts
+      const updatedPacks = await getUserPacks(userId);
+      setPacks(updatedPacks);
+
+      setSelectedIds(new Set());
+      setIsSelectionMode(false);
+      setShowPackModal(false);
+      toast.success(`${ids.length} sticker pakete eklendi!`);
+    } catch (e) {
+      console.error("Add to pack failed:", e);
+      toast.error("Sticker eklenemedi.");
+    } finally {
+      setIsPackLoading(false);
+    }
+  };
+
+  /**
+   * Create a new pack with selected stickers
+   */
+  const handleCreateNewPack = async (packName: string) => {
+    if (selectedIds.size < 1) {
+      toast.error("En az 1 sticker seçmelisin.");
+      return;
+    }
+
+    setIsPackLoading(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const firstSticker = stickers.find(s => selectedIds.has(s.id));
+
+      const newPack = await createStickerPack(
+        userId,
+        packName,
+        "Kloze User",
+        ids,
+        firstSticker?.image_url || ""
+      );
+
+      if (newPack) {
+        // Update local state
+        setPacks(prev => [newPack, ...prev]);
+        setStickers(prev =>
+          prev.map(s =>
+            selectedIds.has(s.id) ? { ...s, pack_id: newPack.id } : s
+          )
+        );
+
+        setSelectedIds(new Set());
+        setIsSelectionMode(false);
+        setShowPackModal(false);
+        toast.success(`"${packName}" paketi oluşturuldu!`);
+      }
+    } catch (e) {
+      console.error("Create pack failed:", e);
+      toast.error("Paket oluşturulamadı.");
+    } finally {
+      setIsPackLoading(false);
+    }
+  };
+
+  /**
+   * Open Pack Edit Modal
+   */
+  const handleEditPack = async (pack: StickerPack) => {
+    setEditLoading(true);
+    setPackEditModalOpen(true);
+    setEditingPack(pack);
+
+    try {
+      // Get full pack details with stickers
+      const fullPack = await getStickerPackById(pack.id);
+      if (fullPack && fullPack.stickers) {
+        setPackEditStickers(fullPack.stickers as any);
+      }
+
+      // Get available stickers (not in any pack)
+      const available = stickers.filter(s => !s.pack_id);
+      setAvailableStickers(available);
+    } catch (e) {
+      console.error("Failed to load pack for editing", e);
+      toast.error("Paket yüklenemedi");
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  /**
+   * Remove sticker from pack (in edit mode)
+   */
+  const handleRemoveStickerFromPack = async (stickerId: string) => {
+    if (!editingPack) return;
+
+    try {
+      await removeStickerFromPack(stickerId, editingPack.id);
+      setPackEditStickers(prev => prev.filter(s => s.id !== stickerId));
+
+      // Add back to available list
+      const removed = packEditStickers.find(s => s.id === stickerId);
+      if (removed) {
+        setAvailableStickers(prev => [...prev, removed as any]);
+      }
+
+      toast.success("Sticker paketten çıkarıldı");
+
+      // Refresh packs
+      const updatedPacks = await getUserPacks(userId);
+      setPacks(updatedPacks);
+    } catch (e) {
+      toast.error("Sticker çıkarılamadı");
+    }
+  };
+
+  /**
+   * Add sticker to pack (in edit mode)
+   */
+  const handleAddStickerToEditingPack = async (stickerId: string) => {
+    if (!editingPack) return;
+
+    try {
+      await addStickersToExistingPack(editingPack.id, [stickerId]);
+
+      // Move from available to pack stickers
+      const added = availableStickers.find(s => s.id === stickerId);
+      if (added) {
+        setPackEditStickers(prev => [...prev, added as any]);
+        setAvailableStickers(prev => prev.filter(s => s.id !== stickerId));
+      }
+
+      toast.success("Sticker pakete eklendi");
+
+      // Refresh packs
+      const updatedPacks = await getUserPacks(userId);
+      setPacks(updatedPacks);
+    } catch (e) {
+      toast.error("Sticker eklenemedi");
+    }
+  };
+
+  /**
+   * Set sticker as pack cover
+   */
+  const handleSetPackCover = async (stickerId: string) => {
+    if (!editingPack) return;
+
+    try {
+      const success = await updatePackCover(editingPack.id, stickerId);
+      if (success) {
+        toast.success("Kapak fotoğrafı güncellendi");
+        // Refresh packs to show new cover
+        const updatedPacks = await getUserPacks(userId);
+        setPacks(updatedPacks);
+      } else {
+        toast.error("Kapak fotoğrafı güncellenemedi");
+      }
+    } catch (e) {
+      toast.error("Bir hata oluştu");
+    }
+  };
+
   const settingsItems = [
     { icon: Bell, label: "Bildirimler", description: "Push bildirimleri ayarla" },
     { icon: Palette, label: "Görünüm", description: "Tema ve renk tercihleri" },
@@ -239,11 +449,13 @@ export default function ProfilePage() {
                 İptal
               </Button>
               <Button
-                variant="secondary"
                 size="sm"
-                onClick={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }}
+                disabled={selectedIds.size === 0}
+                onClick={() => setShowPackModal(true)}
+                className="gradient-primary"
               >
-                İptal
+                <Package className="w-4 h-4 mr-2" />
+                Pakete Ekle
               </Button>
               <Button
                 variant="destructive"
@@ -303,7 +515,10 @@ export default function ProfilePage() {
               </button>
             </AvatarSelector>
             <div className="flex-1">
-              <h2 className="text-xl font-black text-foreground">{currentEmail.split('@')[0]}</h2>
+              <h2 className="text-xl font-black text-foreground flex items-center gap-2">
+                {currentEmail.split('@')[0]}
+                {isPro && <Crown className="w-5 h-5 text-amber-400 fill-amber-400" />}
+              </h2>
               <p className="text-muted-foreground text-sm">{currentEmail}</p>
               {isPro ? (
                 <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full gradient-gold text-xs font-bold">
@@ -358,7 +573,7 @@ export default function ProfilePage() {
                           </div>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-40 z-50 bg-background/95 backdrop-blur-xl border-border/50">
-                          <DropdownMenuItem onClick={() => downloadWhatsAppPack(pack, pack.stickers || [])}>
+                          <DropdownMenuItem onClick={() => downloadWhatsAppPack(pack, (pack.stickers || []) as any)}>
                             <MessageCircle className="w-4 h-4 mr-2 text-green-500" />
                             <span>WhatsApp</span>
                           </DropdownMenuItem>
@@ -369,6 +584,10 @@ export default function ProfilePage() {
                             <Share2 className="w-4 h-4 mr-2" />
                             <span>Paylaş</span>
                           </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleEditPack(pack)}>
+                            <Edit className="w-4 h-4 mr-2 text-primary" />
+                            <span>Düzenle</span>
+                          </DropdownMenuItem>
                           <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDeletePack(pack.id)}>
                             <Trash2 className="w-4 h-4 mr-2" />
                             <span>Sil</span>
@@ -377,7 +596,7 @@ export default function ProfilePage() {
                       </DropdownMenu>
                     </div>
                   </div>
-                  <p className="mt-2 text-xs font-bold text-center truncate">{pack.title}</p>
+                  <p className="mt-2 text-xs font-bold text-center truncate">{pack.name}</p>
                   <p className="text-[10px] text-center text-muted-foreground">{pack.stickers?.length || 0} sticker</p>
                 </div>
               ))}
@@ -389,18 +608,48 @@ export default function ProfilePage() {
           )}
         </div>
 
+        {/* LIKED PACKS */}
+        {likedPacks.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-1">
+              <Star className="w-4 h-4 text-accent fill-accent" />
+              <h3 className="text-sm font-bold text-muted-foreground">Beğendiğim Paketler ({likedPacks.length})</h3>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {likedPacks.map((pack) => (
+                <PackCard key={pack.id} pack={pack} size="sm" isLiked={true} />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* MY STICKERS GALLERY */}
         <div className="space-y-3 pb-20">
           <div className="flex items-center justify-between px-1">
             <h3 className="text-sm font-bold text-muted-foreground">Tüm Stickerlarım ({stickers.length})</h3>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={isSelectionMode ? "text-primary" : "text-muted-foreground"}
-              onClick={() => setIsSelectionMode(!isSelectionMode)}
-            >
-              {isSelectionMode ? "Bitti" : "Seç"}
-            </Button>
+            {stickers.length > 0 && (
+              <Button
+                size="sm"
+                className={cn(
+                  "rounded-full text-xs font-bold px-4 h-8 transition-all",
+                  isSelectionMode
+                    ? "bg-green-500 hover:bg-green-600 text-white"
+                    : "gradient-primary text-white glow-violet"
+                )}
+                onClick={() => {
+                  if (isSelectionMode) {
+                    setSelectedIds(new Set());
+                  }
+                  setIsSelectionMode(!isSelectionMode);
+                }}
+              >
+                {isSelectionMode ? (
+                  <>✓ Bitti</>
+                ) : (
+                  <><Package className="w-3.5 h-3.5 mr-1.5" /> Paket Yap</>
+                )}
+              </Button>
+            )}
           </div>
 
           {isLoading ? (
@@ -593,6 +842,112 @@ export default function ProfilePage() {
             <AdBanner className="shadow-2xl border-primary/20 bg-background/80 backdrop-blur-md" />
           </div>
         )}
+
+        {/* Pack Selector Modal */}
+        <PackSelectorModal
+          isOpen={showPackModal}
+          onClose={() => setShowPackModal(false)}
+          stickerCount={selectedIds.size}
+          userPacks={packs}
+          onAddToPack={handleAddToPack}
+          onCreateNewPack={handleCreateNewPack}
+          isLoading={isPackLoading}
+        />
+
+        {/* Pack Edit Modal */}
+        <Dialog open={packEditModalOpen} onOpenChange={setPackEditModalOpen}>
+          <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Edit className="w-5 h-5 text-primary" />
+                Paketi Düzenle: {editingPack?.name}
+              </DialogTitle>
+            </DialogHeader>
+
+            {editLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto space-y-4">
+                {/* Current Pack Stickers */}
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Package className="w-4 h-4" />
+                    Paketteki Stickerlar ({packEditStickers.length})
+                  </h4>
+                  {packEditStickers.length > 0 ? (
+                    <div className="grid grid-cols-5 gap-2 p-2 bg-muted/20 rounded-xl max-h-[150px] overflow-y-auto">
+                      {packEditStickers.map(sticker => (
+                        <div key={sticker.id} className="relative group aspect-square">
+                          <img
+                            src={sticker.image_url}
+                            className="w-full h-full object-contain rounded-lg bg-background/50"
+                          />
+                          <button
+                            onClick={() => handleRemoveStickerFromPack(sticker.id)}
+                            className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                            title="Paketten Çıkar"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleSetPackCover(sticker.id)}
+                            className="absolute bottom-1 right-1 w-6 h-6 bg-black/60 backdrop-blur-sm text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:bg-primary"
+                            title="Kapak Fotoğrafı Yap"
+                          >
+                            <ImageIcon className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-4 bg-muted/20 rounded-xl">
+                      Pakette sticker yok
+                    </p>
+                  )}
+                </div>
+
+                {/* Available Stickers to Add */}
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Plus className="w-4 h-4 text-primary" />
+                    Eklenebilir Stickerlar ({availableStickers.length})
+                  </h4>
+                  {availableStickers.length > 0 ? (
+                    <div className="grid grid-cols-5 gap-2 p-2 bg-primary/5 rounded-xl max-h-[150px] overflow-y-auto border border-primary/20">
+                      {availableStickers.map(sticker => (
+                        <div key={sticker.id} className="relative group aspect-square">
+                          <img
+                            src={sticker.image_url}
+                            className="w-full h-full object-contain rounded-lg bg-background/50 cursor-pointer hover:ring-2 ring-primary transition-all"
+                            onClick={() => handleAddStickerToEditingPack(sticker.id)}
+                          />
+                          <div
+                            className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-primary/20 rounded-lg cursor-pointer"
+                            onClick={() => handleAddStickerToEditingPack(sticker.id)}
+                          >
+                            <Plus className="w-5 h-5 text-primary" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-4 bg-muted/20 rounded-xl">
+                      Eklenebilir sticker yok. Önce sticker üretin!
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="pt-4 border-t">
+              <Button onClick={() => setPackEditModalOpen(false)} className="w-full">
+                Tamam
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );

@@ -3,7 +3,10 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Capacitor } from '@capacitor/core';
 
-const REVENUECAT_API_KEY = "app30abbfe35b";
+const REVENUECAT_API_KEY = import.meta.env.VITE_REVENUECAT_API_KEY || "app30abbfe35b";
+
+// Entitlement identifiers - adjust these based on your RevenueCat dashboard
+const PRO_ENTITLEMENT_IDENTIFIERS = ['pro', 'premium', 'kloze_pro', 'unlimited'];
 
 export interface ProStatus {
     isPro: boolean;
@@ -104,12 +107,13 @@ class MonetizationService {
     }
 
     private handleCustomerInfo(info: CustomerInfo): boolean {
-        const isPro = typeof info.entitlements.active['pro'] !== "undefined"; // Assuming 'pro' is the entitlement identifier in RC
+        // Check all possible entitlement identifiers
+        const isPro = PRO_ENTITLEMENT_IDENTIFIERS.some(
+            identifier => typeof info.entitlements.active[identifier] !== "undefined"
+        );
 
-        if (isPro) {
-            // Update Supabase User Metadata to reflect Pro status seamlessly
-            this.updateUserStatus(true);
-        }
+        // Always sync status with database
+        this.updateUserStatus(isPro);
 
         return isPro;
     }
@@ -119,8 +123,8 @@ class MonetizationService {
         // We can use an Edge Function webhook for security, but client-side sync is okay for MVP
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-            // Update a 'is_pro' column in users table or metadata
-            await supabase.from('users').update({ is_pro: isPro }).eq('id', user.id);
+            // Update a 'is_pro' column in profiles table
+            await supabase.from('profiles').update({ is_pro: isPro }).eq('id', user.id);
         }
     }
 }

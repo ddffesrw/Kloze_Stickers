@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useUserCredits } from "@/hooks/useUserCredits";
-import { Coins, Gift, Zap, Video, Clock } from "lucide-react";
+import { Coins, Gift, Zap, Video, Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { currentUser } from "@/data/mockData";
 import { auth, supabase } from "@/lib/supabase";
@@ -90,7 +90,9 @@ export default function GetCreditsPage() {
                 <h1 className="text-2xl font-black gradient-text">Kredi Kazan</h1>
                 <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-border/50 bg-secondary/10">
                     <Coins className="w-4 h-4 text-secondary" />
-                    <span className="font-bold text-secondary">{credits}</span>
+                    <span className="font-bold text-secondary">
+                        {creditsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : credits}
+                    </span>
                 </div>
             </header>
 
