@@ -17,9 +17,13 @@ import DashboardPage from "./pages/DashboardPage";
 import AuthPage from "./pages/AuthPage";
 import GalleryUploadPage from "./pages/GalleryUploadPage";
 import LegalPage from "./pages/LegalPage";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 import NotFound from "./pages/NotFound";
 import { supabase } from "@/lib/supabase";
 import { Session } from "@supabase/supabase-js";
+import { adMobService } from "@/services/adMobService";
+import { monetizationService } from "@/services/monetizationService";
 
 const queryClient = new QueryClient();
 
@@ -56,6 +60,19 @@ const App = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Monetization Init
+  useEffect(() => {
+    const initMonetization = async () => {
+      await adMobService.initialize();
+      await monetizationService.initialize();
+
+      // Check Pro Status on launch
+      const isPro = await monetizationService.checkProStatus();
+      adMobService.updateProStatus(isPro);
+    };
+    initMonetization();
+  }, []);
+
   // Show splash animation
   if (loading || showSplash) {
     return (
@@ -76,6 +93,8 @@ const App = () => {
               {/* Public Routes */}
               <Route path="/auth" element={<PublicRoute session={session}><AuthPage /></PublicRoute>} />
               <Route path="/legal" element={<LegalPage />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfService />} />
 
               {/* Protected Routes */}
               <Route path="/" element={<ProtectedRoute session={session}><HomePage /></ProtectedRoute>} />

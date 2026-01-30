@@ -4,7 +4,7 @@
  */
 
 import { generateSticker, type GenerateStickerOptions } from './runwareService';
-import { generateStickerHF } from './forgeService';
+
 import { generateStickerDalle } from './openAiService';
 import { removeBackgroundWithRetry } from './backgroundRemovalService';
 import { supabase } from '@/lib/supabase';
@@ -61,14 +61,10 @@ export async function generateAndUploadSticker(
     });
 
     let generated;
-    if (provider === 'huggingface') {
-      generated = await generateStickerHF({
-        prompt,
-        ...options
-      });
-    } else if (provider === 'dalle') {
+    if (provider === 'dalle') {
       generated = await generateStickerDalle(prompt);
     } else {
+      // Default / Runware
       generated = await generateSticker({
         prompt,
         ...options

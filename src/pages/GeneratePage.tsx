@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { useStickerGeneration } from "@/hooks/useStickerGeneration";
 import { auth, supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { checkPromptSafety, getSafetyWarningMessage } from "@/services/moderationService";
 import { getDraftStickers, type Sticker } from "@/services/stickerService";
 import { createStickerPack, type StickerPack } from "@/services/stickerPackService";
 import { downloadWhatsAppPack, downloadAllStickers } from "@/services/whatsappService";
@@ -127,6 +128,13 @@ export default function GeneratePage() {
   const handleGenerate = async (provider: 'runware' | 'huggingface' | 'dalle') => {
     if (!prompt.trim()) {
       toast.error("Lütfen bir prompt girin");
+      return;
+    }
+
+    // Safety Check
+    const safety = checkPromptSafety(prompt);
+    if (!safety.isSafe) {
+      toast.error(getSafetyWarningMessage(safety));
       return;
     }
 

@@ -32,6 +32,7 @@ import {
 
 import { monetizationService } from "@/services/monetizationService";
 import { PurchasesPackage } from "@revenuecat/purchases-capacitor";
+import { ProModal } from "@/components/monetization/ProModal";
 
 // ... existing code ...
 
@@ -138,17 +139,17 @@ export default function ProfilePage() {
     loadData();
   }, []);
 
-  const handlePurchase = async () => {
-    if (packages.length > 0) {
-      // Default to first package (monthly)
-      const success = await monetizationService.purchasePackage(packages[0]);
-      if (success) {
-        setIsPro(true);
-        toast.success("Hoş geldin şampiyon! 🌟");
-      }
-    } else {
-      toast.error("Market bağlantısı kurulamadı (Simülatörde çalışmaz)");
-    }
+  // Pro Modal State
+  const [showProModal, setShowProModal] = useState(false);
+
+  // ... helpers ...
+
+  useEffect(() => {
+    // ... loadData ...
+  }, []);
+
+  const handlePurchase = () => {
+    setShowProModal(true);
   };
 
   const handleRestore = async () => {
@@ -434,6 +435,8 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-background pb-28 relative">
       {/* Background */}
       <div className="fixed inset-0 mesh-gradient opacity-30 pointer-events-none" />
+
+      <ProModal open={showProModal} onOpenChange={setShowProModal} />
 
       {/* Bulk Action Bar - Sticky Bottom */}
       {isSelectionMode && (
@@ -797,16 +800,28 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Legal Button */}
-        <Link to="/legal">
-          <Button
-            variant="ghost"
-            className="w-full h-14 rounded-2xl justify-start text-muted-foreground hover:bg-muted/10 border border-transparent hover:border-border/30 mb-2"
-          >
-            <span className="w-5 h-5 mr-3 flex items-center justify-center">⚖️</span>
-            Yasal Bilgiler
-          </Button>
-        </Link>
+        {/* Legal Links */}
+        <div className="space-y-2">
+          <Link to="/privacy">
+            <Button
+              variant="ghost"
+              className="w-full h-12 rounded-2xl justify-start text-muted-foreground hover:bg-muted/10 border border-transparent hover:border-border/30"
+            >
+              <Shield className="w-5 h-5 mr-3" />
+              Gizlilik Politikası
+            </Button>
+          </Link>
+
+          <Link to="/terms">
+            <Button
+              variant="ghost"
+              className="w-full h-12 rounded-2xl justify-start text-muted-foreground hover:bg-muted/10 border border-transparent hover:border-border/30"
+            >
+              <HelpCircle className="w-5 h-5 mr-3" />
+              Kullanım Koşulları
+            </Button>
+          </Link>
+        </div>
 
         {/* Logout Button */}
         <Button

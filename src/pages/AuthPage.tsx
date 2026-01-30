@@ -2,11 +2,12 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
-import { Chrome, Apple } from "lucide-react"; // Chrome as Google placeholder if needed, or simple text
+import { Chrome, Apple, Check } from "lucide-react"; // Chrome as Google placeholder if needed, or simple text
 import { toast } from "sonner";
 
 export default function AuthPage() {
     const [loading, setLoading] = useState(false);
+    const [agreed, setAgreed] = useState(false);
 
     const handleSocialLogin = async (provider: 'google' | 'apple') => {
         try {
@@ -51,8 +52,8 @@ export default function AuthPage() {
                 <div className="space-y-4">
                     <Button
                         onClick={() => handleSocialLogin('google')}
-                        disabled={loading}
-                        className="w-full h-14 rounded-2xl bg-white text-black hover:bg-gray-100 border border-gray-200 font-bold text-lg transition-all hover:scale-[1.02] flex items-center justify-center gap-3"
+                        disabled={loading || !agreed}
+                        className="w-full h-14 rounded-2xl bg-white text-black hover:bg-gray-100 border border-gray-200 font-bold text-lg transition-all hover:scale-[1.02] flex items-center justify-center gap-3 disabled:opacity-50"
                     >
                         <img src="https://www.google.com/favicon.ico" alt="Google" className="w-6 h-6" />
                         Google ile Devam Et
@@ -60,18 +61,27 @@ export default function AuthPage() {
 
                     <Button
                         onClick={() => handleSocialLogin('apple')}
-                        disabled={loading}
-                        className="w-full h-14 rounded-2xl bg-black text-white hover:bg-gray-900 font-bold text-lg transition-all hover:scale-[1.02] flex items-center justify-center gap-3"
+                        disabled={loading || !agreed}
+                        className="w-full h-14 rounded-2xl bg-black text-white hover:bg-gray-900 font-bold text-lg transition-all hover:scale-[1.02] flex items-center justify-center gap-3 disabled:opacity-50"
                     >
                         <Apple className="w-6 h-6" />
                         Apple ile Devam Et
                     </Button>
                 </div>
 
-                <div className="mt-8 text-center">
-                    <p className="text-xs text-muted-foreground/60">
-                        Devam ederek Kullanım Koşulları ve Gizlilik Politikasını kabul etmiş olursunuz.
-                    </p>
+                <div className="mt-8 space-y-4">
+                    <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors cursor-pointer" onClick={() => setAgreed(!agreed)}>
+                        <div className={`mt-0.5 w-5 h-5 rounded-md border-2 transition-all flex items-center justify-center ${agreed ? 'bg-primary border-primary' : 'border-white/30'}`}>
+                            {agreed && <Check className="w-3.5 h-3.5 text-white" />}
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-snug">
+                            <Link to="/terms" onClick={(e) => e.stopPropagation()} className="text-primary hover:underline underline-offset-4">Kullanım Koşulları</Link> ve <Link to="/privacy" onClick={(e) => e.stopPropagation()} className="text-primary hover:underline underline-offset-4">Gizlilik Politikası</Link>'nı okudum ve kabul ediyorum.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="mt-4 text-center">
+                    {!agreed && <p className="text-[10px] text-primary/80 animate-pulse">Devam etmek için kutucuğu işaretleyin</p>}
                 </div>
             </div>
         </div>

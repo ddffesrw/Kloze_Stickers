@@ -13,6 +13,7 @@ import { HeroBannerSlider } from "@/components/kloze/HeroBannerSlider";
 import { getTrendingStickerPacks, getNewStickerPacks, getUserLikedPackIds, togglePackLike } from "@/services/stickerPackService";
 import { auth, supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { getBlockedUsers } from "@/services/blockService";
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<"trending" | "new">("trending");
@@ -22,6 +23,7 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [isPro, setIsPro] = useState(false);
+  const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
 
   // 1. Fetch Real Data
   useEffect(() => {
@@ -37,8 +39,12 @@ export default function HomePage() {
         if (newP && newP.length > 0) setNewPacks(newP);
 
         if (user) {
-          const likedIds = await getUserLikedPackIds(user.id);
+          const [likedIds, blockedIds] = await Promise.all([
+            getUserLikedPackIds(user.id),
+            getBlockedUsers()
+          ]);
           setLikedPackIds(likedIds);
+          setBlockedUserIds(new Set(blockedIds));
 
           // Check Pro status
           const { data: profile } = await supabase
@@ -91,7 +97,8 @@ export default function HomePage() {
   };
 
 
-  const currentList = activeTab === "trending" ? trendingPacks : newPacks;
+  const currentList = (activeTab === "trending" ? trendingPacks : newPacks)
+    .filter(pack => !blockedUserIds.has(pack.user_id));
 
   const filteredPacks = activeCategory
     ? currentList.filter((pack) => pack.category === activeCategory)

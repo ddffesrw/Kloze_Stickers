@@ -7,6 +7,8 @@ import { categories } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { getAllStickerPacks, searchStickerPacks } from "@/services/stickerPackService";
 import { ComingSoonCard } from "@/components/kloze/ComingSoonCard";
+import { getBlockedUsers } from "@/services/blockService";
+import { auth } from "@/lib/supabase";
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
@@ -14,13 +16,22 @@ export default function SearchPage() {
   const [isFocused, setIsFocused] = useState(false);
   const [allPacks, setAllPacks] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
 
   // Fetch real packs from Supabase
   useEffect(() => {
     const loadPacks = async () => {
       try {
-        const packs = await getAllStickerPacks();
+        const [packs, user] = await Promise.all([
+          getAllStickerPacks(),
+          auth.getCurrentUser()
+        ]);
         setAllPacks(packs || []);
+
+        if (user) {
+          const blockedIds = await getBlockedUsers();
+          setBlockedUserIds(new Set(blockedIds));
+        }
       } catch (e) {
         console.error("Packs load error:", e);
       } finally {
@@ -48,7 +59,9 @@ export default function SearchPage() {
       selectedCategories.length === 0 ||
       selectedCategories.includes(pack.category);
 
-    return matchesQuery && matchesCategory;
+    const isNotBlocked = !blockedUserIds.has(pack.user_id);
+
+    return matchesQuery && matchesCategory && isNotBlocked;
   });
 
   const popularSearches = ["Meme", "Kedi", "Anime", "Aşk", "Komik", "Gamer"];
