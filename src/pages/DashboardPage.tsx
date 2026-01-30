@@ -5,7 +5,7 @@ import { BarChart, DollarSign, Image as ImageIcon, Users, Lock } from "lucide-re
 import { estimateCost } from "@/services/stickerGenerationService";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { BulkGenerator } from "@/components/admin/BulkGenerator";
+
 
 const ADMIN_EMAIL = "johnaxe.storage@gmail.com";
 
@@ -105,7 +105,7 @@ export default function DashboardPage() {
 
             {/* Bulk Generator */}
             <div className="mt-8">
-                <BulkGenerator />
+
             </div>
 
             {/* Profit Calculator */}

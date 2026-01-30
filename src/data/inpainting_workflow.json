@@ -1,0 +1,150 @@
+{
+    "3": {
+        "inputs": {
+            "seed": 2024,
+            "steps": 25,
+            "cfg": 7,
+            "sampler_name": "euler_ancestral",
+            "scheduler": "karras",
+            "denoise": 0.55,
+            "model": [
+                "4",
+                0
+            ],
+            "positive": [
+                "6",
+                0
+            ],
+            "negative": [
+                "7",
+                0
+            ],
+            "latent_image": [
+                "10",
+                0
+            ]
+        },
+        "class_type": "KSampler",
+        "_meta": {
+            "title": "KSampler"
+        }
+    },
+    "4": {
+        "inputs": {
+            "ckpt_name": "dreamshaper_8.safetensors"
+        },
+        "class_type": "CheckpointLoaderSimple",
+        "_meta": {
+            "title": "Load Checkpoint"
+        }
+    },
+    "6": {
+        "inputs": {
+            "text": "perfect hand, holding hammer, detailed, vector style, white background",
+            "clip": [
+                "4",
+                1
+            ]
+        },
+        "class_type": "CLIPTextEncode",
+        "_meta": {
+            "title": "Positive Prompt"
+        }
+    },
+    "7": {
+        "inputs": {
+            "text": "bad anatomy, blurry, low quality, deformed, mutated",
+            "clip": [
+                "4",
+                1
+            ]
+        },
+        "class_type": "CLIPTextEncode",
+        "_meta": {
+            "title": "Negative Prompt"
+        }
+    },
+    "8": {
+        "inputs": {
+            "samples": [
+                "3",
+                0
+            ],
+            "vae": [
+                "4",
+                2
+            ]
+        },
+        "class_type": "VAEDecode",
+        "_meta": {
+            "title": "VAE Decode"
+        }
+    },
+    "9": {
+        "inputs": {
+            "filename_prefix": "Inpaint_Fix",
+            "images": [
+                "8",
+                0
+            ]
+        },
+        "class_type": "SaveImage",
+        "_meta": {
+            "title": "Save Image"
+        }
+    },
+    "10": {
+        "inputs": {
+            "pixels": [
+                "11",
+                0
+            ],
+            "vae": [
+                "4",
+                2
+            ],
+            "mask": [
+                "12",
+                0
+            ],
+            "grow_mask_by": 6
+        },
+        "class_type": "VAEEncodeForInpaint",
+        "_meta": {
+            "title": "VAE Encode (for Inpainting)"
+        }
+    },
+    "11": {
+        "inputs": {
+            "image": "example.png",
+            "upload": "image"
+        },
+        "class_type": "LoadImage",
+        "_meta": {
+            "title": "Load Image (Original)"
+        }
+    },
+    "12": {
+        "inputs": {
+            "channel": "red",
+            "image": [
+                "13",
+                0
+            ]
+        },
+        "class_type": "ImageToMask",
+        "_meta": {
+            "title": "Convert Mask"
+        }
+    },
+    "13": {
+        "inputs": {
+            "image": "mask.png",
+            "upload": "image"
+        },
+        "class_type": "LoadImage",
+        "_meta": {
+            "title": "Load Image (Mask)"
+        }
+    }
+}

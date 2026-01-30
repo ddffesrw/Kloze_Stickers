@@ -5,11 +5,12 @@ import {
   ArrowLeft, Package, Users, DollarSign, Upload, Search,
   Plus, Minus, Crown, Sparkles, Activity, MoreVertical, Eye, Trash2,
   Settings, BarChart3, Bell, CheckCircle, Shield, Zap, Coins, Loader2,
-  Image as ImageIcon, ShieldAlert, CreditCard, Layers, Edit, X, Check
+  Image as ImageIcon, ShieldAlert, CreditCard, Layers, Edit, X, Check,
+  RefreshCw, Flag, Brush
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { allPacks, aiStyles, promptModifiers, generateFinalPrompt, translatePrompt } from "@/data/mockData";
+import { allPacks } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { auth, supabase } from "@/lib/supabase";
@@ -25,17 +26,17 @@ import {
 } from "@/services/stickerService";
 import {
   createAdminPack,
-  getNewStickerPacks as getAllPacks,
+  getAllStickerPacks as getAllPacks,
   deleteStickerPack as deletePack,
-  updatePackTitle
+  updatePackDetails,
+  getStickerPackById,
+  removeStickerFromPack,
+  getNextPackName
 } from "@/services/stickerPackService";
-import {
-  generateStickerHF,
-  getForgeModels,
-  getForgeCurrentModel,
-  setForgeModel
-} from "@/services/forgeService";
-import { removeBackgroundWithRetry } from "@/services/backgroundRemovalService";
+import { getAllCategories, createCategory, deleteCategory, Category } from "../services/categoryService";
+
+
+import { getAllReports, updateReportStatus, type Report } from "@/services/reportService";
 import { User } from "@supabase/supabase-js";
 import {
   Dialog,
@@ -44,6 +45,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { ImageCropperModal } from "@/components/common/ImageCropperModal";
+import { getComfyHistory, getComfyImageBlob, ComfyImage } from "@/services/comfyService";
 
 const ADMIN_EMAIL = "johnaxe.storage@gmail.com";
 
@@ -71,6 +74,9 @@ export default function AdminPage() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editPackId, setEditPackId] = useState<string>("");
   const [editPackTitle, setEditPackTitle] = useState("");
+  const [editPackCategory, setEditPackCategory] = useState("");
+  const [editPackStickers, setEditPackStickers] = useState<any[]>([]);
+  const [loadingEdit, setLoadingEdit] = useState(false);
 
   // Upload State
   const [files, setFiles] = useState<File[]>([]);
@@ -79,33 +85,41 @@ export default function AdminPage() {
   const [publisher, setPublisher] = useState("Kloze Official");
   const [category, setCategory] = useState("Eğlence");
   const [isPremium, setIsPremium] = useState(false);
+  const [uploadRemoveBg, setUploadRemoveBg] = useState(false);
+  const [uploadCompress, setUploadCompress] = useState(true); // Default ON
   const [selectedCoverIndex, setSelectedCoverIndex] = useState(0);
 
-  // AI Generate State
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiGenerating, setAiGenerating] = useState(false);
-  const [aiResult, setAiResult] = useState<string | null>(null);
-  const [aiRemoveBg, setAiRemoveBg] = useState(true);
+  // Cropper State
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [pendingCropFile, setPendingCropFile] = useState<File | null>(null);
 
-  // Model State
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
-  const [currentModel, setCurrentModel] = useState("");
-  const [changingModel, setChangingModel] = useState(false);
 
-  // Bulk Gen State
-  const [bulkPrompt, setBulkPrompt] = useState("");
-  const [bulkQuantity, setBulkQuantity] = useState(0); // Default to 0 as requested
-  const [selectedStyle, setSelectedStyle] = useState("3d"); // Style State
-  const [bulkGenerating, setBulkGenerating] = useState(false);
-  const [bulkResults, setBulkResults] = useState<{ id: string, imageURL: string, seed: number, loading?: boolean, blob?: Blob }[]>([]);
-  const [bulkPackTitle, setBulkPackTitle] = useState("");
-  const [bulkCategory, setBulkCategory] = useState("Sanat");
-  const [selectedModifiers, setSelectedModifiers] = useState<string[]>(["masterpiece", "sharpFocus"]); // Default modifiers
 
-  // Generation Progress Modal State
-  const [progressModalOpen, setProgressModalOpen] = useState(false);
-  const [generationProgress, setGenerationProgress] = useState<{ index: number, status: 'pending' | 'generating' | 'done' | 'error' | 'cancelled' }[]>([]);
-  const cancelGenerationRef = useRef(false);
+
+
+
+
+
+  // Comfy Bridge State
+  const [comfyImages, setComfyImages] = useState<ComfyImage[]>([]);
+  const [selectedComfyImages, setSelectedComfyImages] = useState<string[]>([]);
+  const [loadingComfy, setLoadingComfy] = useState(false);
+  const [comfyUrl, setComfyUrl] = useState("http://127.0.0.1:8188");
+
+  // Moderate/Report State
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+
+  // Inpainting State
+  const [showInpaintingModal, setShowInpaintingModal] = useState(false);
+  const [inpaintingTarget, setInpaintingTarget] = useState<{ id: string, imageUrl: string, blob: Blob } | null>(null);
+  const [inpaintingPrompt, setInpaintingPrompt] = useState("");
+
+  // Category State
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatEmoji, setNewCatEmoji] = useState("");
 
   // 2. EFFECTS
   useEffect(() => {
@@ -115,30 +129,134 @@ export default function AdminPage() {
       setUser(u);
       setLoading(false);
 
-      // Load Initial Models (Fire and forget)
-      loadModels();
+
     };
     init();
-  }, []);
+  }, [activeTab]); // Trigger when tab changes
 
-  const loadModels = async () => {
-    const models = await getForgeModels();
-    setAvailableModels(models);
-    const current = await getForgeCurrentModel();
-    setCurrentModel(current);
+
+
+  const fetchReports = async () => {
+    try {
+      setLoadingReports(true);
+      const data = await getAllReports();
+      setReports(data || []);
+    } catch (error) {
+      console.error("Fetch reports error:", error);
+    } finally {
+      setLoadingReports(false);
+    }
   };
 
-  const handleModelChange = async (newModel: string) => {
-    if (!newModel || newModel === currentModel) return;
-    setChangingModel(true);
-    const success = await setForgeModel(newModel);
-    if (success) {
-      setCurrentModel(newModel);
-      toast.success(`Model değiştirildi: ${newModel}`);
-    } else {
-      toast.error("Model değiştirilemedi");
+  const handleUpdateReportStatus = async (reportId: string, status: Report['status']) => {
+    try {
+      const res = await updateReportStatus(reportId, status);
+      if (res.success) {
+        toast.success(res.message);
+        setReports(reports.map(r => r.id === reportId ? { ...r, status } : r));
+      } else {
+        toast.error(res.message);
+      }
+    } catch (error) {
+      toast.error("İşlem başarısız");
     }
-    setChangingModel(false);
+  };
+
+  const handleActionReport = async (report: Report, action: 'resolve' | 'dismiss' | 'delete_content') => {
+    if (action === 'delete_content' && report.reported_pack_id) {
+      if (confirm("Bu paketi tamamen silmek istediğine emin misin?")) {
+        await deletePack(report.reported_pack_id);
+        toast.success("Paket silindi");
+        handleUpdateReportStatus(report.id, 'resolved');
+        // Refresh packs list
+        const packsList = await getAllPacks();
+        if (packsList) setPacks(packsList);
+      }
+      return;
+    }
+
+    handleUpdateReportStatus(report.id, action === 'resolve' ? 'resolved' : 'dismissed');
+  };
+
+  // 3. HANDLERS
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const selectedFiles = Array.from(e.target.files);
+
+      // If single file selected, trigger cropper
+      // (User requested zoom/pan/crop capability for mobile)
+      if (selectedFiles.length === 1) {
+        const file = selectedFiles[0];
+        const reader = new FileReader();
+        reader.addEventListener("load", () => {
+          setCropImageSrc(reader.result?.toString() || null);
+          setPendingCropFile(file);
+          setCropModalOpen(true);
+        });
+        reader.readAsDataURL(file);
+        // Clear input so same file can be selected again if cancelled
+        e.target.value = "";
+        return;
+      }
+
+      setFiles(prev => [...prev, ...selectedFiles]);
+    }
+  };
+
+  const handleCropComplete = (croppedBlob: Blob) => {
+    // Add the cropped blob as a file
+    const originalName = pendingCropFile?.name || "sticker.webp";
+    const file = new File([croppedBlob], originalName, { type: "image/webp" });
+    setFiles(prev => [...prev, file]);
+
+    // Cleanup
+    setCropImageSrc(null);
+    setPendingCropFile(null);
+  };
+
+  const fetchComfyHistory = async () => {
+    setLoadingComfy(true);
+    try {
+      const history = await getComfyHistory(10, comfyUrl); // Fetch last 10 generations with custom URL
+      setComfyImages(history);
+      // Data format check
+      if (history.length === 0) toast.info("ComfyUI geçmişi boş veya bağlantı yok");
+    } catch (e) {
+      toast.error("ComfyUI bağlanamadı. URL'yi kontrol et ve --enable-cors-header * ile başlattığından emin ol.");
+    } finally {
+      setLoadingComfy(false);
+    }
+  };
+
+  const handleComfyImport = async () => {
+    if (selectedComfyImages.length === 0) return;
+
+    setLoadingComfy(true);
+    try {
+      const newFiles: File[] = [];
+
+      for (const id of selectedComfyImages) {
+        const img = comfyImages.find(i => i.id === id);
+        if (img) {
+          const blob = await getComfyImageBlob(img);
+          const file = new File([blob], img.filename, { type: "image/png" });
+          newFiles.push(file);
+        }
+      }
+
+      setFiles(prev => [...prev, ...newFiles]);
+      toast.success(`${newFiles.length} görsel içe aktarıldı! "Yayınla" butonuyla paketi oluşturabilirsin.`);
+
+      // Auto-switch to upload tab
+      setActiveTab("upload");
+
+      // Clear selection
+      setSelectedComfyImages([]);
+    } catch (e) {
+      toast.error("Görseller alınamadı");
+    } finally {
+      setLoadingComfy(false);
+    }
   };
 
   // Track blob URLs for cleanup to avoid memory leaks
@@ -156,24 +274,41 @@ export default function AdminPage() {
     const loadData = async () => {
       if (!user || user.email !== ADMIN_EMAIL) return;
       try {
-        const [stats, usersList, packsList] = await Promise.all([
+        const [stats, usersList, packsList, reportsList, categoriesResult] = await Promise.all([
           getAdminStats(),
           adminGetAllUsers(),
-          getAllPacks() // Reusing getNewPacks logic (all packs sorted by date)
+          getAllPacks(),
+          getAllReports(),
+          getAllCategories()
         ]);
 
         if (stats) setAdminStatsData(stats);
         if (usersList) setUsers(usersList);
         if (packsList) setPacks(packsList);
+        if (reportsList) setReports(reportsList);
+        if (categoriesResult) setCategories(categoriesResult);
+
+        // Init Auto-Name if categories loaded and categories exist (Targeting Upload Tab now)
+        if (categoriesResult && categoriesResult.length > 0 && !packTitle) {
+          const firstCat = categoriesResult[0].name;
+          setCategory(firstCat);
+          getNextPackName(firstCat).then(name => setPackTitle(name));
+        }
+
       } catch (e) {
         console.error("Admin load error", e);
-        // Toast is noisy on load, maybe suppress or show concise
-        // toast.error("Veriler yüklenemedi");
       }
     };
 
     if (!loading && user) loadData();
   }, [loading, user]);
+
+  // Auto-Name Effect when Category Changes (Upload Tab)
+  useEffect(() => {
+    if (category) {
+      getNextPackName(category).then(name => setPackTitle(name));
+    }
+  }, [category]);
 
 
   // 3. HANDLERS
@@ -225,15 +360,56 @@ export default function AdminPage() {
     }
   };
 
-  const handleRenamePack = async () => {
+  const handleUpdatePack = async () => {
     if (!editPackId || !editPackTitle) return;
     try {
-      await updatePackTitle(editPackId, editPackTitle);
+      await updatePackDetails(editPackId, editPackTitle, editPackCategory);
       toast.success("Paket güncellendi");
-      setPacks(packs.map(p => p.id === editPackId ? { ...p, title: editPackTitle, name: editPackTitle } : p));
+      setPacks(packs.map(p => p.id === editPackId ? { ...p, title: editPackTitle, name: editPackTitle, category: editPackCategory } : p));
       setEditDialogOpen(false);
     } catch (e) {
       toast.error("Güncelleme başarısız");
+    }
+  };
+
+  const handleRemoveSticker = async (stickerId: string) => {
+    if (!editPackId) return;
+    try {
+      if (!confirm("Bu sticker'ı paketten çıkarmak istediğinize emin misiniz?")) return;
+
+      await removeStickerFromPack(stickerId, editPackId);
+
+      // Update local state by filtering out the removed sticker
+      setEditPackStickers(prev => prev.filter(s => s.id !== stickerId));
+
+      toast.success("Sticker paketten çıkarıldı");
+
+      // We don't force a full pack refresh to keep it snappy, 
+      // but strictly speaking we should maybe decrement sticker count in main list.
+      // Not critical for now.
+    } catch (e) {
+      console.error(e);
+      toast.error("Sticker silinemedi");
+    }
+  };
+
+  const openEditDialog = async (pack: any) => {
+    setEditPackId(pack.id);
+    setEditPackTitle(pack.name || pack.title);
+    setEditPackCategory(pack.category || "Genel");
+    setEditPackStickers([]); // Clear previous
+    setEditDialogOpen(true);
+    setLoadingEdit(true);
+
+    try {
+      const fullPack = await getStickerPackById(pack.id);
+      if (fullPack && fullPack.stickers) {
+        setEditPackStickers(fullPack.stickers);
+      }
+    } catch (e) {
+      toast.error("Paket içeriği yüklenemedi");
+    } finally {
+      setLoadingEdit(false);
     }
   };
 
@@ -262,11 +438,15 @@ export default function AdminPage() {
       return;
     }
     setUploading(true);
-    const toastId = toast.loading("Yükleniyor...");
+    const toastId = toast.loading("Yükleniyor" + (uploadRemoveBg ? " ve arka plan temizleniyor..." : "..."));
     try {
-      const res = await createAdminPack(user.id, files, packTitle, publisher, category, isPremium, selectedCoverIndex);
+      const res = await createAdminPack(user.id, files, packTitle, publisher, category, isPremium, selectedCoverIndex, uploadRemoveBg, uploadCompress);
       if (res.success) {
         toast.success(res.message, { id: toastId });
+        // Refresh packs
+        const updatedPacks = await getAllPacks();
+        setPacks(updatedPacks || []);
+
         setFiles([]); setPackTitle("");
         setActiveTab("packs");
       } else {
@@ -279,199 +459,7 @@ export default function AdminPage() {
     }
   };
 
-  const handleAIGenerate = async () => {
-    if (!user || !aiPrompt.trim()) {
-      toast.error("Lütfen bir prompt girin");
-      return;
-    }
-    setAiGenerating(true);
-    const toastId = toast.loading("AI sticker oluşturuluyor...");
-    try {
-      const result = await generateStickerHF({ prompt: aiPrompt });
-      toast.success("Sticker oluşturuldu!", { id: toastId });
-      setAiResult(result.imageURL || null);
-      setAiPrompt("");
-    } catch (e: any) {
-      toast.error(e?.message || "Oluşturma başarısız", { id: toastId });
-    } finally {
-      setAiGenerating(false);
-    }
-  };
 
-  const handleBulkGenerate = async () => {
-    if (!bulkPrompt.trim()) return;
-    if (bulkQuantity <= 0) {
-      toast.error("Lütfen üretilecek adet girin");
-      return;
-    }
-
-    // Reset cancel flag
-    cancelGenerationRef.current = false;
-
-    // Setup progress tracking
-    const initialProgress = Array.from({ length: bulkQuantity }, (_, i) => ({
-      index: i,
-      status: 'pending' as const
-    }));
-    setGenerationProgress(initialProgress);
-    setProgressModalOpen(true);
-    setBulkGenerating(true);
-
-    // Create copy for safe updating
-    let currentResults: { id: string, imageURL: string, seed: number }[] = [];
-
-    // Prompt Enhancer using new Modifier System
-    const selectedStyleObj = aiStyles.find(s => s.id === selectedStyle);
-    const stylePrompt = selectedStyleObj ? selectedStyleObj.prompt : "";
-
-    // TRANSLATE Turkish prompt to English first
-    const translatedPrompt = translatePrompt(bulkPrompt);
-    console.log("🔄 Translated prompt:", bulkPrompt, "→", translatedPrompt);
-
-    // Generate base prompt with modifiers (technical quality keywords)
-    const promptWithModifiers = generateFinalPrompt(translatedPrompt, selectedModifiers);
-
-    // Sticker-specific keywords
-    const stickerKeywords = "sticker design, vector style, white background, die-cut white border, centered, isolated on white background";
-
-    // Final combined prompt: Translated User + Modifiers + Style + Sticker Keywords
-    const fullPrompt = `${promptWithModifiers}, ${stylePrompt}, ${stickerKeywords}`;
-
-    // Loop with delay to avoid instant rate limiting if any
-    for (let i = 0; i < bulkQuantity; i++) {
-      // Check if cancelled
-      if (cancelGenerationRef.current) {
-        setGenerationProgress(prev => prev.map((p, idx) =>
-          idx >= i ? { ...p, status: 'cancelled' } : p
-        ));
-        break;
-      }
-
-      // Update status to generating
-      setGenerationProgress(prev => prev.map((p, idx) =>
-        idx === i ? { ...p, status: 'generating' } : p
-      ));
-
-      try {
-        const res = await generateStickerHF({ prompt: fullPrompt + ` variation ${i} ` });
-
-        // Background Removal Check
-        let finalImageUrl = res.imageURL;
-
-        // Track the initial URL from service
-        if (res.imageURL.startsWith('blob:')) {
-          blobUrlsRef.current.push(res.imageURL);
-        }
-
-        let blob = await fetch(res.imageURL).then(r => r.blob());
-        let itemBlob = blob; // Default to original
-
-        // Background Removal
-        if (aiRemoveBg) {
-          try {
-            const processedBlob = await removeBackgroundWithRetry(blob);
-            finalImageUrl = URL.createObjectURL(processedBlob);
-            blobUrlsRef.current.push(finalImageUrl);
-            itemBlob = processedBlob; // Use processed blob
-          } catch (bgError) {
-            console.error("BG Remove failed for bulk item", bgError);
-            // Keep original blob if removal fails
-          }
-        }
-
-        const newsticker = {
-          id: crypto.randomUUID(),
-          ...res,
-          imageURL: finalImageUrl,
-          blob: itemBlob // Store actual blob for publish
-        };
-
-        currentResults = [...currentResults, newsticker];
-        setBulkResults(prev => [...prev, newsticker]);
-
-        // Update status to done
-        setGenerationProgress(prev => prev.map((p, idx) =>
-          idx === i ? { ...p, status: 'done' } : p
-        ));
-
-        // Small delay
-        await new Promise(r => setTimeout(r, 500));
-
-      } catch (e) {
-        console.error("Bulk Item Error", e);
-        // Update status to error
-        setGenerationProgress(prev => prev.map((p, idx) =>
-          idx === i ? { ...p, status: 'error' } : p
-        ));
-      }
-    }
-    setBulkGenerating(false);
-
-    if (cancelGenerationRef.current) {
-      toast.info(`Üretim durduruldu! ${currentResults.length} sticker üretildi.`);
-    } else {
-      toast.success(`${currentResults.length}/${bulkQuantity} Sticker üretildi`);
-    }
-  };
-
-  const handleBulkPublish = async () => {
-    if (bulkResults.length === 0 || !bulkPackTitle) return;
-    const toastId = toast.loading("Paket oluşturuluyor...");
-    setBulkGenerating(true);
-
-    try {
-      // 1. Convert URLs to Files
-      // 1. Convert URLs to Files
-      const filePromises = bulkResults.map(async (item, idx) => {
-        let blob = item.blob;
-        if (!blob) {
-          // Fallback if no blob stored (old items?)
-          const res = await fetch(item.imageURL);
-          blob = await res.blob();
-        }
-        return new File([blob], `sticker_${idx}.webp`, { type: "image/webp" });
-      });
-
-      const filesToUpload = await Promise.all(filePromises);
-
-      // 2. Call existing Upload Service
-      // For bulk, we reuse 'createAdminPack' which takes File[]
-      // We assume they are already 'clean' enough (HF Flux is squareish usually)
-      // Note: We are missing background removal here if HF doesn't do it.
-      // The implementation plan said "Review -> Delete -> Publish".
-      // BG Removal typically happens AFTER generation. 
-      // For this specific 'bulk' tool, maybe we skip BG removal or do it on backend?
-      // Or we can add a check to remove bg? 
-      // Current HF service returns image. 
-      // Let's assume for now we publish them as is (user requested bulk gen + publish).
-      // If BG removal is needed, it would be very slow to do 20x.
-
-      const res = await createAdminPack(
-        user!.id,
-        filesToUpload,
-        bulkPackTitle,
-        "Kloze AI",
-        bulkCategory,
-        isPremium, // Use the state variable
-        0 // cover index
-      );
-
-      if (res.success) {
-        toast.success(res.message, { id: toastId });
-        setBulkResults([]);
-        setBulkPackTitle("");
-        setActiveTab("packs");
-      } else {
-        toast.error(res.message, { id: toastId });
-      }
-
-    } catch (e) {
-      console.error(e);
-      toast.error("Paketleme hatası", { id: toastId });
-    } finally {
-      setBulkGenerating(false);
-    }
-  };
 
   // 4. RENDER
   if (loading) return <div className="p-10 text-center">Loading...</div>;
@@ -521,12 +509,25 @@ export default function AdminPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="w-full grid grid-cols-5 mb-4">
+          <TabsList className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 h-auto p-1 bg-muted/20 mb-6 rounded-2xl gap-1">
             <TabsTrigger value="overview">Genel</TabsTrigger>
             <TabsTrigger value="users">Üyeler</TabsTrigger>
             <TabsTrigger value="packs">Paketler</TabsTrigger>
             <TabsTrigger value="upload">Yükle</TabsTrigger>
-            <TabsTrigger value="ai">AI Üret</TabsTrigger>
+
+            <TabsTrigger value="comfy">ComfyUI</TabsTrigger>
+            <TabsTrigger value="reports" className="relative">
+              Raporlar
+              {reports.filter(r => r.status === 'pending').length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-[10px] text-white flex items-center justify-center rounded-full font-bold animate-pulse">
+                  {reports.filter(r => r.status === 'pending').length}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="categories" className="gap-2">
+              <Settings className="w-4 h-4" />
+              Kategoriler
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -758,11 +759,7 @@ export default function AdminPage() {
                         <Crown className="w-3.5 h-3.5" />
                       </Button>
                       <Button variant="ghost" size="icon" className="w-7 h-7"
-                        onClick={() => {
-                          setEditPackId(pack.id);
-                          setEditPackTitle(pack.title || pack.name);
-                          setEditDialogOpen(true);
-                        }}
+                        onClick={() => openEditDialog(pack)}
                       >
                         <Settings className="w-3.5 h-3.5 text-muted-foreground" />
                       </Button>
@@ -784,7 +781,7 @@ export default function AdminPage() {
             {/* Re-using the Upload UI from before, adapted to new structure */}
             <div className="grid grid-cols-2 gap-4 h-[500px]">
               <div className="border-2 border-dashed rounded-2xl flex flex-col items-center justify-center p-6 hover:bg-accent/5 transition-colors relative">
-                <input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileChange} />
+                <input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileSelect} />
                 <Upload className="w-10 h-10 text-muted-foreground mb-4" />
                 <p className="font-bold">Dosyaları Sürükle</p>
                 <p className="text-xs text-muted-foreground mb-4">{files.length} dosya seçildi</p>
@@ -809,6 +806,7 @@ export default function AdminPage() {
 
               <div className="space-y-4">
                 <Input placeholder="Paket Adı" value={packTitle} onChange={e => setPackTitle(e.target.value)} />
+                <Input placeholder="Yayıncı (Publisher)" value={publisher} onChange={e => setPublisher(e.target.value)} />
 
                 {/* Category Selector */}
                 <div>
@@ -818,16 +816,13 @@ export default function AdminPage() {
                     onChange={e => setCategory(e.target.value)}
                     className="w-full h-10 px-3 rounded-lg bg-muted/30 border border-border/30 text-sm"
                   >
-                    <option value="Eğlence">😂 Eğlence</option>
-                    <option value="Hayvanlar">🐱 Hayvanlar</option>
-                    <option value="Aşk">❤️ Aşk</option>
-                    <option value="Gaming">🎮 Gaming</option>
-                    <option value="Anime">✨ Anime</option>
-                    <option value="Meme">🤣 Meme</option>
-                    <option value="Müzik">🎵 Müzik</option>
-                    <option value="Spor">⚽ Spor</option>
-                    <option value="Yemek">🍕 Yemek</option>
-                    <option value="Seyahat">✈️ Seyahat</option>
+                    {categories.length > 0 ? (
+                      categories.map(c => (
+                        <option key={c.id} value={c.name}>{c.emoji} {c.name}</option>
+                      ))
+                    ) : (
+                      <option value="Genel">📂 Genel</option>
+                    )}
                   </select>
                 </div>
 
@@ -835,351 +830,329 @@ export default function AdminPage() {
                   <input type="checkbox" checked={isPremium} onChange={e => setIsPremium(e.target.checked)} id="prem" />
                   <label htmlFor="prem" className="text-sm font-bold">Premium Paket</label>
                 </div>
-                <Button className="w-full" onClick={handleUpload} disabled={uploading}>
-                  {uploading ? "Yükleniyor..." : "Yayınla"}
+
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                  <input
+                    type="checkbox"
+                    id="removeBgUpload"
+                    className="w-4 h-4 accent-orange-500"
+                    checked={uploadRemoveBg}
+                    onChange={e => setUploadRemoveBg(e.target.checked)}
+                  />
+                  <label htmlFor="removeBgUpload" className="text-xs font-bold text-orange-400 cursor-pointer flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    Arka Planı Sil (Yavaş)
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                  <input
+                    type="checkbox"
+                    id="compressUpload"
+                    className="w-4 h-4 accent-blue-500"
+                    checked={uploadCompress}
+                    onChange={e => setUploadCompress(e.target.checked)}
+                  />
+                  <label htmlFor="compressUpload" className="text-xs font-bold text-blue-400 cursor-pointer flex items-center gap-1">
+                    <Layers className="w-3 h-3" />
+                    Otomatik Sıkıştır (Hızlı & Az Yer)
+                  </label>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={() => setFiles([])} disabled={files.length === 0}>
+                    Temizle
+                  </Button>
+                  <Button className="flex-[2]" onClick={handleUpload} disabled={uploading}>
+                    {uploading ? "Yükleniyor..." : "Yayınla"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+
+
+          <TabsContent value="comfy" className="space-y-4">
+            <div className="glass-card rounded-xl border border-border/20 p-6">
+              {/* Connection Settings */}
+              <div className="flex items-center gap-2 mb-6 p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/10">
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-yellow-500 block mb-1">ComfyUI URL</label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={comfyUrl}
+                      onChange={(e) => setComfyUrl(e.target.value)}
+                      className="bg-black/20 border-yellow-500/20 text-xs font-mono"
+                      placeholder="http://127.0.0.1:8188"
+                    />
+                    <Button onClick={fetchComfyHistory} disabled={loadingComfy} variant="outline" className="border-yellow-500/20 hover:bg-yellow-500/10">
+                      {loadingComfy ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                      Bağlan & Çek
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Telefondan bağlanıyorsan bilgisayarın yerel IP adresini gir (örn: http://192.168.1.35:8188)
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h3 className="text-lg font-bold flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-yellow-400" />
+                    Son Üretilenler
+                  </h3>
+                </div>
+              </div>
+
+              {/* Grid */}
+              {comfyImages.length > 0 ? (
+                <div className="grid grid-cols-4 md:grid-cols-6 gap-3 mb-6">
+                  {comfyImages.map((img) => (
+                    <div
+                      key={img.id}
+                      className={cn(
+                        "aspect-square rounded-lg overflow-hidden relative cursor-pointer border-2 transition-all",
+                        selectedComfyImages.includes(img.id) ? "border-yellow-400 ring-2 ring-yellow-400/20" : "border-transparent opacity-70 hover:opacity-100"
+                      )}
+                      onClick={() => {
+                        if (selectedComfyImages.includes(img.id)) {
+                          setSelectedComfyImages(prev => prev.filter(id => id !== img.id));
+                        } else {
+                          setSelectedComfyImages(prev => [...prev, img.id]);
+                        }
+                      }}
+                    >
+                      <img src={img.url} className="w-full h-full object-cover" />
+                      {selectedComfyImages.includes(img.id) && (
+                        <div className="absolute top-1 right-1 bg-yellow-400 text-black rounded-full p-0.5">
+                          <Check className="w-3 h-3" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-10 bg-black/20 rounded-xl mb-4">
+                  <p className="text-muted-foreground">Henüz görsel çekilmedi.</p>
+                  <p className="text-xs text-muted-foreground/50 mt-1">ComfyUI'ın açık ve --enable-cors-header * ile başladığından emin ol.</p>
+                </div>
+              )}
+
+              {/* Action Bar */}
+              <div className="flex justify-end gap-3 sticky bottom-4 bg-background/80 p-4 backdrop-blur-md rounded-xl border border-border/20 shadow-xl z-10 transition-all transform translate-y-0">
+                <div className="flex-1 flex items-center gap-2">
+                  <span className="text-sm font-bold text-yellow-400">{selectedComfyImages.length}</span>
+                  <span className="text-xs text-muted-foreground">görsel seçildi</span>
+                  {selectedComfyImages.length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedComfyImages(comfyImages.map(i => i.filename))} className="text-xs h-6">
+                      Hepsini Seç
+                    </Button>
+                  )}
+                </div>
+
+                <Button
+                  onClick={handleComfyImport}
+                  disabled={selectedComfyImages.length === 0 || loadingComfy}
+                  className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
+                >
+                  {loadingComfy ? "İşleniyor..." : "Seçilenleri İçe Aktar & Düzenle"}
+                  <ArrowLeft className="w-4 h-4 ml-2 rotate-180" />
                 </Button>
               </div>
             </div>
           </TabsContent>
 
-          <TabsContent value="ai" className="space-y-4">
-            <div className="glass-card rounded-xl border border-border/20 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-primary" />
-                  AI Sticker Üretici (Hugging Face)
-                </h3>
-                {bulkGenerating && (
-                  <span className="text-xs font-mono text-muted-foreground animate-pulse">
-                    Üretiliyor: {bulkResults.length} / {bulkQuantity}
-                  </span>
-                )}
-              </div>
-
+          <TabsContent value="reports" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-black flex items-center gap-2">
+                <Flag className="w-6 h-6 text-destructive" />
+                Moderasyon Kuyruğu
+              </h2>
+              <Button variant="outline" size="sm" onClick={fetchReports} disabled={loadingReports}>
+                <RefreshCw className={cn("w-4 h-4 mr-2", loadingReports && "animate-spin")} />
+                Yenile
+              </Button>
             </div>
 
-            <div className="space-y-4">
-              {/* Model & Prompt Row */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {/* Model Selector */}
-                <div className="md:col-span-1">
-                  <label className="text-sm text-yellow-500 font-bold mb-2 flex items-center justify-between">
-                    <span>Model</span>
-                    {changingModel && <Loader2 className="w-3 h-3 animate-spin" />}
-                    <button onClick={loadModels} className="text-[10px] text-muted-foreground hover:text-white">Yenile</button>
-                  </label>
-                  <select
-                    value={currentModel}
-                    onChange={(e) => handleModelChange(e.target.value)}
-                    disabled={changingModel || bulkGenerating}
-                    className="w-full h-12 px-3 rounded-lg bg-black/20 border border-yellow-500/30 text-xs focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
-                  >
-                    <option value="" disabled>Model Seç...</option>
-                    {availableModels.length > 0 ? (
-                      availableModels.map(m => (
-                        <option key={m} value={m}>{m.replace('.safetensors', '').substring(0, 20)}...</option>
+            <div className="glass-card rounded-xl border border-border/20 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/20 bg-muted/30">
+                      <th className="p-4 text-left font-bold">Raporlanan</th>
+                      <th className="p-4 text-left font-bold">Sebep</th>
+                      <th className="p-4 text-left font-bold">Durum</th>
+                      <th className="p-4 text-left font-bold">Tarih</th>
+                      <th className="p-4 text-right font-bold">İşlemler</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/10">
+                    {reports.length > 0 ? (
+                      reports.map((report) => (
+                        <tr key={report.id} className="hover:bg-muted/10 transition-colors">
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              {report.reported_pack ? (
+                                <>
+                                  <img src={report.reported_pack.tray_image_url} className="w-10 h-10 rounded-lg object-contain bg-black/20" />
+                                  <div>
+                                    <p className="font-bold">{report.reported_pack.name}</p>
+                                    <p className="text-[10px] text-muted-foreground uppercase">Paket</p>
+                                  </div>
+                                </>
+                              ) : report.reported_user ? (
+                                <div>
+                                  <p className="font-bold">{report.reported_user.email}</p>
+                                  <p className="text-[10px] text-muted-foreground uppercase">Kullanıcı</p>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground italic">Bilinmiyor</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <div>
+                              <span className="font-bold px-2 py-0.5 rounded bg-destructive/10 text-destructive text-[10px] uppercase">
+                                {report.reason}
+                              </span>
+                              {report.description && (
+                                <p className="text-xs text-muted-foreground mt-1 max-w-[200px] truncate" title={report.description}>
+                                  {report.description}
+                                </p>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <span className={cn(
+                              "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
+                              report.status === 'pending' ? "bg-yellow-500/20 text-yellow-500 animate-pulse" :
+                                report.status === 'resolved' ? "bg-green-500/20 text-green-500" :
+                                  "bg-muted text-muted-foreground"
+                            )}>
+                              {report.status}
+                            </span>
+                          </td>
+                          <td className="p-4 text-xs text-muted-foreground">
+                            {new Date(report.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="p-4 text-right">
+                            <div className="flex justify-end gap-2">
+                              {report.status === 'pending' && (
+                                <>
+                                  {report.reported_pack_id && (
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      className="h-8 text-[10px] font-bold"
+                                      onClick={() => handleActionReport(report, 'delete_content')}
+                                    >
+                                      SİL
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-[10px] font-bold border-green-500/30 text-green-500 hover:bg-green-500/10"
+                                    onClick={() => handleActionReport(report, 'resolve')}
+                                  >
+                                    ÇÖZÜLDÜ
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 text-[10px] font-bold"
+                                    onClick={() => handleActionReport(report, 'dismiss')}
+                                  >
+                                    YOK SAY
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
                       ))
                     ) : (
-                      <option value="" disabled>Model bulunamadı (Forge açık mı?)</option>
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                          Raporlanmış içerik bulunmuyor. Harikasınız! 🌟
+                        </td>
+                      </tr>
                     )}
-                  </select>
-                </div>
-
-                {/* Prompt Input */}
-                <div className="md:col-span-2">
-                  <label className="text-sm text-muted-foreground mb-2 block">Prompt (İngilizce)</label>
-                  <Input
-                    placeholder="örn: cute cat with sunglasses"
-                    value={bulkPrompt}
-                    onChange={e => setBulkPrompt(e.target.value)}
-                    disabled={bulkGenerating}
-                    className="h-12"
-                  />
-                </div>
-
-                {/* Quantity Input */}
-                <div>
-                  <label className="text-sm text-muted-foreground mb-2 block">Adet</label>
-                  <div className="flex flex-col gap-2">
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      placeholder="0"
-                      value={bulkQuantity === 0 ? "" : bulkQuantity}
-                      onChange={e => {
-                        const val = e.target.value;
-                        if (val === "") {
-                          setBulkQuantity(0);
-                        } else {
-                          const num = parseInt(val);
-                          if (!isNaN(num) && num >= 0 && num <= 20) {
-                            setBulkQuantity(num);
-                          }
-                        }
-                      }}
-                      disabled={bulkGenerating}
-                      className="h-12 text-center text-lg font-bold"
-                    />
-                    <div className="flex gap-1 justify-between">
-                      {[1, 5, 10, 15, 20].map(n => (
-                        <button
-                          key={n}
-                          onClick={() => setBulkQuantity(n)}
-                          disabled={bulkGenerating}
-                          className="bg-muted hover:bg-muted/80 text-xs py-1 px-2 rounded border border-border/50 text-muted-foreground transition-colors"
-                        >
-                          {n}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                  </tbody>
+                </table>
               </div>
-
-              {/* Style Selector */}
-              <div className="space-y-2">
-                <label className="text-sm text-muted-foreground block">Stil Seç</label>
-                <div className="flex gap-2 overflow-x-auto scrollbar-hide snap-x snap-mandatory pb-2">
-                  {aiStyles.map((style) => (
-                    <button
-                      key={style.id}
-                      onClick={() => setSelectedStyle(style.id)}
-                      disabled={bulkGenerating}
-                      className={cn(
-                        "flex-shrink-0 w-20 h-24 rounded-xl p-2 relative overflow-hidden transition-all duration-300 snap-start bg-black/20",
-                        "flex flex-col items-center justify-center gap-1",
-                        "disabled:opacity-50 disabled:cursor-not-allowed",
-                        selectedStyle === style.id
-                          ? "border-2 border-primary/50 bg-primary/10"
-                          : "border border-border/30 hover:border-primary/30"
-                      )}
-                      title={style.description}
-                    >
-                      <span className="text-2xl">{style.icon}</span>
-                      <span className="text-[9px] font-bold text-foreground text-center leading-tight line-clamp-2">{style.name}</span>
-                      {selectedStyle === style.id && (
-                        <div className="absolute top-1 right-1 w-3 h-3 rounded-full bg-primary flex items-center justify-center">
-                          <Check className="w-2 h-2 text-primary-foreground" />
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Prompt Modifiers - Technical Enhancers */}
-              <div className="space-y-2">
-                <label className="text-sm text-cyan-400 font-bold flex items-center gap-2">
-                  🔧 Prompt Modifiers (Teknik Kalite)
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(promptModifiers).map(([key, mod]) => {
-                    const isSelected = selectedModifiers.includes(key);
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => {
-                          setSelectedModifiers(prev =>
-                            isSelected
-                              ? prev.filter(k => k !== key)
-                              : [...prev, key]
-                          );
-                        }}
-                        disabled={bulkGenerating}
-                        className={cn(
-                          "px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200",
-                          "flex items-center gap-1.5 border",
-                          isSelected
-                            ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-300 shadow-sm shadow-cyan-500/20"
-                            : "bg-muted/30 border-border/40 text-muted-foreground hover:border-cyan-500/30 hover:text-cyan-400"
-                        )}
-                      >
-                        <span>{mod.icon}</span>
-                        <span>{mod.label}</span>
-                        {isSelected && <Check className="w-3 h-3" />}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-[10px] text-muted-foreground">
-                  Seçilen: {selectedModifiers.length} modifier • Stil ile karışmaz
-                </p>
-              </div>
-
-              {/* Options Row */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border/30">
-                <div>
-                  <p className="text-sm font-medium">Arka Planı Sil</p>
-                  <p className="text-xs text-muted-foreground">Şeffaf PNG sticker (Otomatik)</p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={aiRemoveBg}
-                  onChange={e => setAiRemoveBg(e.target.checked)}
-                  className="w-5 h-5 accent-primary"
-                  disabled={bulkGenerating}
-                />
-              </div>
-
-              <Button
-                className="w-full h-12 text-lg"
-                onClick={handleBulkGenerate}
-                disabled={bulkGenerating || !bulkPrompt.trim()}
-              >
-                {bulkGenerating ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Oluşturuluyor... ({bulkResults.length})
-                  </div>
-                ) : (
-                  "Üretimi Başlat"
-                )}
-              </Button>
-
-              {/* Results Grid - Unified View */}
-              {bulkResults.length > 0 && (
-                <div className="mt-8 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="flex items-center justify-between border-b pb-2">
-                    <h4 className="font-bold text-lg">Sonuçlar ({bulkResults.length})</h4>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setBulkResults([])}
-                      disabled={bulkGenerating}
-                      className="text-destructive hover:text-destructive/80"
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Tümünü Sil
-                    </Button>
-                  </div>
-
-                  <div className="grid grid-cols-3 md:grid-cols-5 gap-4 p-4 rounded-xl border bg-black/20 max-h-[500px] overflow-y-auto custom-scrollbar">
-                    {bulkResults.map((res) => (
-                      <div key={res.id} className="relative group aspect-square rounded-xl overflow-hidden border border-border/40 bg-muted/5">
-                        <img src={res.imageURL} className={cn("w-full h-full object-contain p-1", res.loading && "opacity-50 blur-sm")} alt="Generated" />
-
-                        {res.loading && (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                          </div>
-                        )}
-
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                          {/* View button - larger and primary */}
-                          <a
-                            href={res.imageURL}
-                            target="_blank"
-                            className="p-3 bg-primary/90 text-white rounded-full hover:bg-primary transition-colors shadow-lg"
-                            title="Büyüt"
-                          >
-                            <Eye className="w-5 h-5" />
-                          </a>
-                          {/* Delete button - smaller and requires confirmation */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (window.confirm('Bu stickeri silmek istediğinize emin misiniz?')) {
-                                setBulkResults(prev => prev.filter(p => p.id !== res.id));
-                              }
-                            }}
-                            className="p-1.5 bg-red-500/70 text-white rounded-full hover:bg-red-600 transition-colors text-xs"
-                            title="Sil"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {bulkGenerating && (
-                      <div className="aspect-square rounded-xl border border-dashed border-primary/50 flex flex-col items-center justify-center bg-primary/5 animate-pulse">
-                        <Loader2 className="w-8 h-8 text-primary animate-spin mb-2" />
-                        <span className="text-xs text-primary font-mono">Üretiliyor...</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Publish Actions */}
-                  <div className="glass-card p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-emerald-500 uppercase tracking-wider flex items-center justify-between">
-                          <span>Paket Adı</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              // Creative pack name generator
-                              const words = bulkPrompt.split(" ").filter(w => w.length > 2).slice(0, 2);
-                              const styleObj = aiStyles.find(s => s.id === selectedStyle);
-                              const styleName = styleObj?.name || "Art";
-                              const suffixes = ["Pack", "Collection", "Series", "Set", "Bundle"];
-                              const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
-
-                              const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-                              const baseName = words.map(capitalize).join(" ");
-
-                              const generatedName = baseName
-                                ? `${baseName} ${styleName} ${suffix}`
-                                : `${styleName} Sticker ${suffix}`;
-
-                              setBulkPackTitle(generatedName);
-                            }}
-                            className="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
-                          >
-                            <Sparkles className="w-3 h-3" />
-                            Otomatik İsim
-                          </button>
-                        </label>
-                        <Input
-                          placeholder="Örn: Cyber Cats Pack"
-                          value={bulkPackTitle}
-                          onChange={e => setBulkPackTitle(e.target.value)}
-                          className="bg-black/20 border-emerald-500/30 focus-visible:ring-emerald-500/50"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-emerald-500 uppercase tracking-wider">Kategori</label>
-                        <select
-                          value={bulkCategory}
-                          onChange={e => setBulkCategory(e.target.value)}
-                          className="w-full h-10 px-3 rounded-lg bg-black/20 border border-emerald-500/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                        >
-                          <option value="Eğlence">😂 Eğlence</option>
-                          <option value="Hayvanlar">🐱 Hayvanlar</option>
-                          <option value="Aşk">❤️ Aşk</option>
-                          <option value="Gaming">🎮 Gaming</option>
-                          <option value="Sanat">🎨 Sanat</option>
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-2 p-2 rounded-lg bg-orange-500/10 border border-orange-500/30">
-                        <input
-                          type="checkbox"
-                          id="bulkPremium"
-                          className="w-4 h-4 accent-orange-500"
-                          checked={isPremium}
-                          onChange={e => setIsPremium(e.target.checked)}
-                        />
-                        <label htmlFor="bulkPremium" className="text-xs font-bold text-orange-400 uppercase tracking-wider cursor-pointer flex items-center gap-1">
-                          <Crown className="w-3 h-3" />
-                          Premium Paket (Pro Only)
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Button
-                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold h-12 shadow-lg shadow-emerald-900/20"
-                    onClick={handleBulkPublish}
-                    disabled={bulkGenerating || bulkResults.length === 0 || !bulkPackTitle.trim()}
-                  >
-                    <Package className="w-5 h-5 mr-2" />
-                    Paket Olarak Yayınla ({bulkResults.length})
-                  </Button>
-                </div>
-              )}
             </div>
           </TabsContent>
 
+          <TabsContent value="categories" className="space-y-6">
+            <div className="glass-card p-6 rounded-xl border border-border/20">
+              <h3 className="font-bold mb-4 flex items-center gap-2">
+                <Settings className="w-5 h-5 text-primary" />
+                Kategori Yönetimi
+              </h3>
+
+              <div className="flex gap-4 mb-6 items-end">
+                <div className="space-y-2 flex-1">
+                  <label className="text-sm font-medium">Kategori Adı</label>
+                  <Input
+                    value={newCatName}
+                    onChange={e => setNewCatName(e.target.value)}
+                    placeholder="Örn: Doğa"
+                  />
+                </div>
+                <div className="space-y-2 w-24">
+                  <label className="text-sm font-medium">Emoji</label>
+                  <Input
+                    value={newCatEmoji}
+                    onChange={e => setNewCatEmoji(e.target.value)}
+                    placeholder="🌿"
+                    className="text-center text-xl"
+                  />
+                </div>
+                <Button
+                  onClick={async () => {
+                    if (!newCatName || !newCatEmoji) return toast.error("Eksik bilgi");
+                    try {
+                      const cat = await createCategory(newCatName, newCatEmoji);
+                      if (cat) {
+                        setCategories([...categories, cat]);
+                        setNewCatName(""); setNewCatEmoji("");
+                        toast.success("Kategori eklendi");
+                      }
+                    } catch (e) { toast.error("Hata"); }
+                  }}
+                >
+                  <Plus className="w-4 h-4 mr-2" /> Ekle
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {categories.map(cat => (
+                  <div key={cat.id} className="p-3 border rounded-lg flex items-center justify-between bg-muted/20">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{cat.emoji}</span>
+                      <span className="font-medium">{cat.name}</span>
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                      onClick={async () => {
+                        if (!confirm(`${cat.name} silinsin mi?`)) return;
+                        await deleteCategory(cat.id);
+                        setCategories(categories.filter(c => c.id !== cat.id));
+                        toast.success("Silindi");
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </TabsContent>
 
         </Tabs>
       </main>
@@ -1222,106 +1195,86 @@ export default function AdminPage() {
           <DialogHeader>
             <DialogTitle>Paketi Düzenle</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
-            <label className="text-xs text-muted-foreground mb-1 block">Paket Başlığı</label>
-            <Input
-              value={editPackTitle}
-              onChange={e => setEditPackTitle(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button onClick={handleRenamePack}>Kaydet</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Generation Progress Modal */}
-      <Dialog open={progressModalOpen} onOpenChange={(open) => {
-        // Only allow closing when not generating
-        if (!bulkGenerating) setProgressModalOpen(open);
-      }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-primary" />
-              Sticker Üretiliyor
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {/* Progress Summary */}
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">İlerleme:</span>
-              <span className="font-bold">
-                {generationProgress.filter(p => p.status === 'done').length} / {generationProgress.length}
-              </span>
-            </div>
-
-            {/* Progress Bar */}
-            <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary transition-all duration-300"
-                style={{
-                  width: `${(generationProgress.filter(p => p.status === 'done').length / generationProgress.length) * 100}%`
-                }}
+          <div className="py-4 space-y-4">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Paket Başlığı</label>
+              <Input
+                value={editPackTitle}
+                onChange={e => setEditPackTitle(e.target.value)}
               />
             </div>
 
-            {/* Individual Items Grid */}
-            <div className="grid grid-cols-5 gap-2 max-h-[200px] overflow-y-auto p-2 bg-muted/20 rounded-xl">
-              {generationProgress.map((item, idx) => (
-                <div
-                  key={idx}
-                  className={cn(
-                    "aspect-square rounded-lg flex items-center justify-center text-xs font-bold transition-all",
-                    item.status === 'pending' && "bg-muted/50 text-muted-foreground",
-                    item.status === 'generating' && "bg-primary/20 text-primary animate-pulse border-2 border-primary",
-                    item.status === 'done' && "bg-green-500/20 text-green-500",
-                    item.status === 'error' && "bg-red-500/20 text-red-500",
-                    item.status === 'cancelled' && "bg-gray-500/20 text-gray-500"
-                  )}
-                >
-                  {item.status === 'pending' && <span className="opacity-50">{idx + 1}</span>}
-                  {item.status === 'generating' && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {item.status === 'done' && <CheckCircle className="w-4 h-4" />}
-                  {item.status === 'error' && <X className="w-4 h-4" />}
-                  {item.status === 'cancelled' && <span className="opacity-50">-</span>}
-                </div>
-              ))}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Kategori</label>
+              <select
+                value={editPackCategory}
+                onChange={e => setEditPackCategory(e.target.value)}
+                className="w-full h-10 px-3 rounded-lg bg-muted/30 border border-border/30 text-sm"
+              >
+                {categories.length > 0 ? (
+                  categories.map(c => (
+                    <option key={c.id} value={c.name}>{c.emoji} {c.name}</option>
+                  ))
+                ) : (
+                  <option value="Genel">📂 Genel</option>
+                )}
+              </select>
             </div>
 
-            {/* Current Status Text */}
-            <p className="text-center text-sm text-muted-foreground">
-              {bulkGenerating ? (
-                <>Sticker #{generationProgress.findIndex(p => p.status === 'generating') + 1} üretiliyor...</>
+            <div>
+              <label className="text-xs text-muted-foreground mb-2 block font-bold">Stickerlar ({editPackStickers.length})</label>
+              {loadingEdit ? (
+                <div className="flex justify-center p-4">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
               ) : (
-                <>Tamamlandı!</>
-              )}
-            </p>
-          </div>
+                <div className="grid grid-cols-4 gap-2 max-h-[300px] overflow-y-auto p-2 bg-muted/20 rounded-lg">
+                  {editPackStickers.map((s) => (
+                    <div key={s.id} className="relative aspect-square group rounded-md overflow-hidden bg-black/20">
+                      <img src={s.image_url} className="w-full h-full object-cover" />
 
-          <DialogFooter className="flex gap-2">
-            {bulkGenerating ? (
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  cancelGenerationRef.current = true;
-                  toast.info("Üretim durduruluyor...");
-                }}
-                className="w-full"
-              >
-                <X className="w-4 h-4 mr-2" />
-                Durdur
-              </Button>
-            ) : (
-              <Button onClick={() => setProgressModalOpen(false)} className="w-full">
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Tamam
-              </Button>
-            )}
+                      <div className="absolute top-1 right-1">
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="w-6 h-6 rounded-full shadow-md opacity-90 hover:opacity-100"
+                          onClick={(e) => { e.stopPropagation(); handleRemoveSticker(s.id); }}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {editPackStickers.length === 0 && (
+                    <div className="col-span-4 text-center py-4 text-xs text-muted-foreground">
+                      Bu pakette sticker yok.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleUpdatePack}>Kaydet</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div >
+
+
+
+      {/* Image Cropper Modal */}
+      <ImageCropperModal
+        isOpen={cropModalOpen}
+        onClose={() => {
+          setCropModalOpen(false);
+          setPendingCropFile(null);
+          setCropImageSrc(null);
+        }}
+        imageSrc={cropImageSrc}
+        onCropComplete={handleCropComplete}
+        aspectRatio={1}
+      />
+
+    </div>
   );
 }

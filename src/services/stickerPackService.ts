@@ -8,6 +8,7 @@ import { supabase, type Database } from '@/lib/supabase';
 import { storageService, BUCKETS } from './storageService';
 import { createTrayIcon, compressImage } from '@/utils/imageUtils';
 import type { StickerPackInfo } from './whatsappStickerService';
+import { removeBackgroundWithRetry } from './backgroundRemovalService';
 import { uploadAdminSticker, type Sticker } from './stickerService';
 
 // Re-export or define types locally if needed, but using Database types is safer
@@ -23,7 +24,10 @@ export interface StickerPack extends DbStickerPack {
  * Also ensures tray_image_url has a fallback to first sticker
  */
 function mapPackWithStickers(pack: any): StickerPack {
-  const stickers = pack.user_stickers || [];
+  // Supabase can return the joined relation as 'stickers' or 'user_stickers' depending on query
+  // Prioritize whatever array is available
+  const stickers = pack.stickers || pack.user_stickers || [];
+
   // Fallback: use first sticker's image as cover if tray_image_url is missing
   const coverUrl = pack.tray_image_url || stickers[0]?.image_url || null;
 
@@ -42,13 +46,22 @@ export async function getAllStickerPacks(): Promise<StickerPack[]> {
     .from('sticker_packs')
     .select(`
       *,
-      user_stickers (
-        *
-      )
+      user_stickers (*)
     `)
     .order('created_at', { ascending: false });
 
-  if (error) throw error;
+  if (error) {
+    console.error("Supabase Error:", error);
+    throw error;
+  }
+
+  if (data && data.length > 0) {
+    console.log("Supabase Pack Data [0]:", data[0]);
+    if (!data[0].stickers) console.warn("WARNING: 'stickers' relation is missing in response!");
+  } else {
+    console.log("Supabase returned no packs.");
+  }
+
   return (data || []).map(mapPackWithStickers);
 }
 
@@ -60,9 +73,7 @@ export async function getStickerPackById(packId: string): Promise<StickerPack | 
     .from('sticker_packs')
     .select(`
       *,
-      user_stickers (
-        *
-      )
+      user_stickers (*)
     `)
     .eq('id', packId)
     .single();
@@ -146,9 +157,7 @@ export async function searchStickerPacks(query: string): Promise<StickerPack[]> 
     .from('sticker_packs')
     .select(`
       *,
-      user_stickers (
-        *
-      )
+      user_stickers (*)
     `)
     .or(`name.ilike.%${query}%,publisher.ilike.%${query}%,category.ilike.%${query}%`)
     .order('downloads', { ascending: false });
@@ -265,12 +274,151 @@ export async function createStickerPack(
 }
 
 /**
+ * Create Pack from Files (Admin Bulk Flow)
+ */
+export async function createAdminPack(
+  userId: string,
+  files: File[],
+  title: string,
+  publisher: string,
+  category: string,
+  isPremium: boolean,
+  coverIndex: number = 0,
+  shouldRemoveBg: boolean = false,
+  applyCompression: boolean = true
+): Promise<{ success: boolean; message: string }> {
+  try {
+    if (files.length === 0) return { success: false, message: "Dosya seçilmedi" };
+
+    // 1. Upload Files First (Parallel)
+    // We can't use uploadAdminSticker directly because it needs a packId for DB insert.
+    // Instead, we'll upload to storage first, gather URLs, THEN create pack, THEN create sticker records.
+
+    const uploadPromises = files.map(async (file, idx) => {
+      try {
+        let finalBlob: Blob = file;
+
+        // Optional BG Removal
+        if (shouldRemoveBg) {
+          try {
+            // Compress first to speed up BG removal? Or BG remove first?
+            // Providing original file (or slightly compressed) to BG remover is usually better.
+            // But let's compress lightly first to save memory if user uploads 4k images.
+            const compressedInput = await compressImage(file, 0.8, 1024); // Initial resize to max 1024px
+            finalBlob = await removeBackgroundWithRetry(compressedInput);
+          } catch (bgError) {
+            console.warn(`BG Remove failed for file ${idx}, using original`, bgError);
+            // Fallback to original
+          }
+        }
+
+        let compressedBlob = finalBlob;
+
+        // Optional Compression (Default ON)
+        if (applyCompression) {
+          // If BG removed, use result. If not, compress original file.
+          // If BG removed result is already small, compressImage handles it (optimizes quality)
+          // But if we want RAW upload (no compression), we skip this block.
+          compressedBlob = await compressImage(finalBlob instanceof File ? finalBlob : new File([finalBlob], "sticker.webp"));
+        } else {
+          // If user wants NO compression (upload as is), we just ensure it's a blob.
+          // Warning: If BG removal ran, finalBlob is already a blob.
+          // If BG removal didn't run, finalBlob is File.
+          compressedBlob = finalBlob;
+        }
+
+        const fileName = `${userId}/${Date.now()}_${Math.random().toString(36).substring(7)}.webp`; // We still enforce proper naming
+        const { publicUrl } = await storageService.upload(BUCKETS.STICKERS, fileName, compressedBlob);
+        return { publicUrl, size: compressedBlob.size, success: true };
+      } catch (e) {
+        console.error("File upload failed", e);
+        return { publicUrl: "", size: 0, success: false };
+      }
+    });
+
+    const fileResults = await Promise.all(uploadPromises);
+    const successfulUploads = fileResults.filter(r => r.success);
+
+    if (successfulUploads.length === 0) {
+      return { success: false, message: "Hiçbir dosya yüklenemedi" };
+    }
+
+    // 2. Generate Tray Icon (from cover index)
+    let trayUrl = "";
+    try {
+      const targetIndex = (coverIndex >= 0 && coverIndex < successfulUploads.length) ? coverIndex : 0;
+      const validCoverUrl = successfulUploads[targetIndex].publicUrl;
+
+      const trayBlob = await createTrayIcon(validCoverUrl);
+      const trayFileName = `${userId}/${Date.now()}_tray.webp`;
+      const uploadResult = await storageService.upload(BUCKETS.THUMBNAILS, trayFileName, trayBlob);
+      trayUrl = uploadResult.publicUrl;
+    } catch (trayError) {
+      console.error("Tray icon generation failed, using first image as fallback", trayError);
+      trayUrl = successfulUploads[0].publicUrl; // Fallback to full image if tray gen fails
+    }
+
+    // 3. Create Pack (Single Insert with Tray URL)
+    const { data: pack, error: packError } = await supabase
+      .from('sticker_packs')
+      .insert({
+        user_id: userId,
+        name: title,
+        publisher: publisher, // Add publisher
+        category: category || "Genel",
+        tray_image_url: trayUrl, // Insert immediately
+        is_premium: isPremium // If schema supports it
+      })
+      .select()
+      .single();
+
+    if (packError) throw packError;
+
+    // 4. Create Sticker Records in DB
+    const stickerInserts = successfulUploads.map(upload => ({
+      user_id: userId,
+      pack_id: pack.id,
+      image_url: upload.publicUrl,
+      prompt: "Admin Import",
+      size_bytes: upload.size,
+      width: 512,
+      height: 512
+    }));
+
+    const { error: stickersError } = await supabase
+      .from('user_stickers')
+      .insert(stickerInserts);
+
+    if (stickersError) {
+      // If stickers fail, we might want to clean up the pack, but for now just report error
+      console.error("Stockers insert failed", stickersError);
+      return { success: false, message: "Paket oluşturuldu ama stickerlar eklenemedi." };
+    }
+
+    return { success: true, message: `${successfulUploads.length} sticker ile paket oluşturuldu!` };
+
+  } catch (error: any) {
+    console.error("Admin pack creation failed", error);
+    return { success: false, message: error.message || "Paket oluşturulamadı" };
+  }
+}
+
+/**
  * Update Pack Title
  */
-export async function updatePackTitle(packId: string, title: string): Promise<void> {
+/**
+ * Update Pack Details (Title & Category)
+ */
+export async function updatePackDetails(packId: string, title?: string, category?: string): Promise<void> {
+  const updates: any = {};
+  if (title) updates.name = title;
+  if (category) updates.category = category;
+
+  if (Object.keys(updates).length === 0) return;
+
   const { error } = await supabase
     .from('sticker_packs')
-    .update({ name: title })
+    .update(updates)
     .eq('id', packId);
   if (error) throw error;
 }
@@ -437,104 +585,6 @@ export function convertToWhatsAppFormat(pack: StickerPack): StickerPackInfo {
 }
 
 /**
- * Create Pack from Files (Admin Bulk Flow)
- */
-export async function createAdminPack(
-  userId: string,
-  files: File[],
-  title: string,
-  publisher: string,
-  category: string,
-  isPremium: boolean,
-  coverIndex: number = 0
-): Promise<{ success: boolean; message: string }> {
-  try {
-    if (files.length === 0) return { success: false, message: "Dosya seçilmedi" };
-
-    // 1. Upload Files First (Parallel)
-    // We can't use uploadAdminSticker directly because it needs a packId for DB insert.
-    // Instead, we'll upload to storage first, gather URLs, THEN create pack, THEN create sticker records.
-
-    const uploadPromises = files.map(async (file) => {
-      try {
-        const compressedBlob = await compressImage(file);
-        const fileName = `${userId}/${Date.now()}_${Math.random().toString(36).substring(7)}.webp`;
-        const { publicUrl } = await storageService.upload(BUCKETS.STICKERS, fileName, compressedBlob);
-        return { publicUrl, size: compressedBlob.size, success: true };
-      } catch (e) {
-        console.error("File upload failed", e);
-        return { publicUrl: "", size: 0, success: false };
-      }
-    });
-
-    const fileResults = await Promise.all(uploadPromises);
-    const successfulUploads = fileResults.filter(r => r.success);
-
-    if (successfulUploads.length === 0) {
-      return { success: false, message: "Hiçbir dosya yüklenemedi" };
-    }
-
-    // 2. Generate Tray Icon (from cover index)
-    let trayUrl = "";
-    try {
-      const targetIndex = (coverIndex >= 0 && coverIndex < successfulUploads.length) ? coverIndex : 0;
-      const validCoverUrl = successfulUploads[targetIndex].publicUrl;
-
-      const trayBlob = await createTrayIcon(validCoverUrl);
-      const trayFileName = `${userId}/${Date.now()}_tray.webp`;
-      const uploadResult = await storageService.upload(BUCKETS.THUMBNAILS, trayFileName, trayBlob);
-      trayUrl = uploadResult.publicUrl;
-    } catch (trayError) {
-      console.error("Tray icon generation failed, using first image as fallback", trayError);
-      trayUrl = successfulUploads[0].publicUrl; // Fallback to full image if tray gen fails
-    }
-
-    // 3. Create Pack (Single Insert with Tray URL)
-    const { data: pack, error: packError } = await supabase
-      .from('sticker_packs')
-      .insert({
-        user_id: userId,
-        name: title,
-        publisher: publisher, // Add publisher
-        category: category || "Genel",
-        tray_image_url: trayUrl, // Insert immediately
-        is_premium: isPremium // If schema supports it
-      })
-      .select()
-      .single();
-
-    if (packError) throw packError;
-
-    // 4. Create Sticker Records in DB
-    const stickerInserts = successfulUploads.map(upload => ({
-      user_id: userId,
-      pack_id: pack.id,
-      image_url: upload.publicUrl,
-      prompt: "Admin Import",
-      size_bytes: upload.size,
-      width: 512,
-      height: 512
-    }));
-
-    const { error: stickersError } = await supabase
-      .from('user_stickers')
-      .insert(stickerInserts);
-
-    if (stickersError) {
-      // If stickers fail, we might want to clean up the pack, but for now just report error
-      console.error("Stockers insert failed", stickersError);
-      return { success: false, message: "Paket oluşturuldu ama stickerlar eklenemedi." };
-    }
-
-    return { success: true, message: `${successfulUploads.length} sticker ile paket oluşturuldu!` };
-
-  } catch (error: any) {
-    console.error("Admin pack creation failed", error);
-    return { success: false, message: error.message || "Paket oluşturulamadı" };
-  }
-}
-
-/**
  * Pro Leaderboard - Top 10 Pro creators by likes and downloads
  */
 export interface LeaderboardEntry {
@@ -613,4 +663,25 @@ export async function getProLeaderboard(): Promise<LeaderboardEntry[]> {
     console.error("Leaderboard fetch failed", e);
     return [];
   }
+}
+
+/**
+ * Get Next Auto-Generated Pack Name
+ * Format: {Category}_Pack_{Count+1}
+ */
+export async function getNextPackName(category: string): Promise<string> {
+  const { count, error } = await supabase
+    .from('sticker_packs')
+    .select('*', { count: 'exact', head: true })
+    .eq('category', category);
+
+  if (error) {
+    console.warn("Could not count packs for auto-naming", error);
+    return `${category}_Pack_1`;
+  }
+
+  const nextIndex = (count || 0) + 1;
+  // Ensure we handle spaces in category names if any (e.g. "Funny Cats" -> "Funny_Cats_Pack_1")
+  const sanitizedCategory = category.replace(/\s+/g, '_');
+  return `${sanitizedCategory}_Pack_${nextIndex}`;
 }

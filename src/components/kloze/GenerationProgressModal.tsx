@@ -175,12 +175,20 @@ export function GenerationProgressModal({
                                 </span>
                                 <span className="text-primary font-bold">{progress}%</span>
                             </div>
+
+                            {/* Cancel Button */}
+                            <button
+                                onClick={onComplete} // Using onComplete to close for now, ideally should create separate onCancel prop
+                                className="mt-4 w-full py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs text-white/40 transition-colors"
+                            >
+                                İptal Et
+                            </button>
                         </div>
                     )}
 
                     {/* Fun Facts */}
                     {!isComplete && progress > 30 && progress < 90 && (
-                        <div className="mt-6 p-3 rounded-xl bg-white/5 border border-white/10">
+                        <div className="mt-2 p-3 rounded-xl bg-white/5 border border-white/10">
                             <p className="text-[11px] text-white/40">
                                 💡 Biliyormuydun? AI her seferinde benzersiz bir sticker üretir!
                             </p>

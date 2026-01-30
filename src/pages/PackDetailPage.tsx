@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Share2, Heart, MessageCircle, Download, Crown, Sparkles, Send, Loader2 } from "lucide-react";
+import { ArrowLeft, Share2, Heart, MessageCircle, Download, Crown, Sparkles, Send, Loader2, Flag, ShieldAlert } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { StickerCard } from "@/components/kloze/StickerCard";
@@ -16,6 +16,14 @@ import { useStickerShare } from "@/hooks/useStickerShare";
 import { canAddToWhatsApp } from "@/services/stickerPackLogicService";
 import { getStickerPackById } from "@/services/stickerPackService";
 import { toast } from "sonner";
+import { blockUser } from "@/services/blockService";
+import { ReportModal } from "@/components/kloze/ReportModal";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function PackDetailPage() {
   const { id } = useParams();
@@ -23,6 +31,8 @@ export default function PackDetailPage() {
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [isBlocking, setIsBlocking] = useState(false);
 
   // Sticker share hook (MOTOR BAĞLANTISI)
   const {
@@ -169,6 +179,38 @@ export default function PackDetailPage() {
             >
               <Share2 className="w-5 h-5 text-foreground" />
             </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="p-3 rounded-2xl glass-card border border-border/30 hover:bg-muted/50 transition-all hover:scale-105">
+                  <ShieldAlert className="w-5 h-5 text-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 bg-background/95 backdrop-blur-xl border-border/50">
+                <DropdownMenuItem onClick={() => setReportModalOpen(true)}>
+                  <Flag className="w-4 h-4 mr-2 text-destructive" />
+                  <span className="text-destructive">İçeriği Rapor Et</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={async () => {
+                    if (confirm("Bu kullanıcıyı engellemek istediğine emin misin? Artık bu kullanıcının hiçbir içeriğini görmeyeceksin.")) {
+                      setIsBlocking(true);
+                      const res = await blockUser(pack.user_id);
+                      if (res.success) {
+                        toast.success(res.message);
+                        window.location.href = "/";
+                      } else {
+                        toast.error(res.message);
+                      }
+                      setIsBlocking(false);
+                    }
+                  }}
+                  disabled={isBlocking}
+                >
+                  <ShieldAlert className="w-4 h-4 mr-2" />
+                  <span>Kullanıcıyı Engelle</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -322,6 +364,14 @@ export default function PackDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Report Modal */}
+      <ReportModal
+        isOpen={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+        packId={pack.id}
+        packTitle={pack.name}
+      />
     </div>
   );
 }

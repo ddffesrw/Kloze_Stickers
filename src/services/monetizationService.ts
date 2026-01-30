@@ -68,7 +68,13 @@ class MonetizationService {
 
     public async purchasePackage(pack: PurchasesPackage): Promise<boolean> {
         try {
-            const { customerInfo } = await Purchases.purchasePackage({ aPackage: pack });
+            const { customerInfo, productIdentifier } = await Purchases.purchasePackage({ aPackage: pack });
+
+            // Check if it's a consumable (Credit Pack)
+            if (pack.product.identifier.includes("credits")) {
+                return await this.handleConsumablePurchase(pack);
+            }
+
             return this.handleCustomerInfo(customerInfo);
         } catch (error: any) {
             if (error.userCancelled) {
@@ -79,6 +85,32 @@ class MonetizationService {
             }
             return false;
         }
+    }
+
+    private async handleConsumablePurchase(pack: PurchasesPackage): Promise<boolean> {
+        // Extract amount from identifier (e.g. "kloze_credits_100")
+        const amountMatch = pack.product.identifier.match(/(\d+)/);
+        const amount = amountMatch ? parseInt(amountMatch[0]) : 0;
+
+        if (amount > 0) {
+            try {
+                // Call Secure RPC
+                const { error } = await supabase.rpc('add_purchased_credits', {
+                    amount_to_add: amount,
+                    transaction_id: `rc_${Date.now()}` // In prod, use real transaction ID
+                });
+
+                if (error) throw error;
+
+                toast.success(`${amount} Kredi hesabınıza eklendi! 🚀`);
+                return true;
+            } catch (e) {
+                console.error("Credit sync failed:", e);
+                toast.error("Krediler eklenemedi! Lütfen destekle iletişime geçin.");
+                return false;
+            }
+        }
+        return false;
     }
 
     public async restorePurchases(): Promise<boolean> {

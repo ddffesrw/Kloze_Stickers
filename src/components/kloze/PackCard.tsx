@@ -1,8 +1,10 @@
-import { Heart, Download, Crown, Share2 } from "lucide-react";
+import { Heart, Download, Crown, Share2, Flag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { Share } from "@capacitor/share";
 import { toast } from "sonner";
+import { useState } from "react";
+import { ReportModal } from "./ReportModal";
 
 interface PackCardProps {
   pack: any;
@@ -13,6 +15,7 @@ interface PackCardProps {
 }
 
 export function PackCard({ pack, size = "md", isLiked, onLike }: PackCardProps) {
+  const [reportModalOpen, setReportModalOpen] = useState(false);
 
   // Use pack.downloads or fallback only if null/undefined
   const downloads = pack.downloads ?? 0;
@@ -147,6 +150,24 @@ export function PackCard({ pack, size = "md", isLiked, onLike }: PackCardProps) 
               <Share2 className="w-3 h-3 text-white/80 group-hover/share:text-white transition-colors" />
             </button>
 
+            {/* Report Button (Next to Share) */}
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setReportModalOpen(true);
+              }}
+              className={cn(
+                "absolute top-1.5 left-9 p-1.5 rounded-xl transition-all duration-200",
+                "bg-background/50 backdrop-blur-sm border border-white/10",
+                "hover:scale-110 active:scale-90",
+                "shadow-md group/report"
+              )}
+              title="İçeriği Rapor Et"
+            >
+              <Flag className="w-3 h-3 text-white/80 group-hover/report:text-destructive transition-colors" />
+            </button>
+
             {/* Premium Badge (Moved down slightly or to bottom left if needed, keeping top left for share but maybe stacked?) */}
             {/* Let's move Premium Badge to Bottom Left for better visibility/separation */}
             {(pack.isPremium || pack.is_premium) && (
@@ -176,6 +197,14 @@ export function PackCard({ pack, size = "md", isLiked, onLike }: PackCardProps) 
           <div className="absolute inset-x-0 bottom-0 h-px bg-black/20" />
         </div>
       </div>
+
+      {/* Report Modal */}
+      <ReportModal
+        isOpen={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+        packId={pack.id}
+        packTitle={pack.title || pack.name}
+      />
     </Link>
   );
 }

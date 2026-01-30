@@ -6,6 +6,7 @@ import { currentUser } from "@/data/mockData";
 import { auth, supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
+import { CreditStore } from "@/components/monetization/CreditStore";
 
 export default function GetCreditsPage() {
     const [lastClaim, setLastClaim] = useState<string | null>(null);
@@ -147,24 +148,8 @@ export default function GetCreditsPage() {
                     </div>
                 </div>
 
-                {/* Buy Credits */}
-                <div className="rounded-3xl p-6 glass-card border border-border/30">
-                    <div className="flex items-center gap-4 mb-4">
-                        <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
-                            <Coins className="w-5 h-5 text-green-500" />
-                        </div>
-                        <div>
-                            <h3 className="font-bold">Kredi Paketi Al</h3>
-                            <p className="text-xs text-muted-foreground">En popüler seçenek</p>
-                        </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                        <Button className="flex-1 bg-green-600 hover:bg-green-700 text-white" onClick={() => toast.success("Satın alma başarılı (Demo)")}>
-                            100 Kredi - ₺29.99
-                        </Button>
-                    </div>
-                </div>
+                {/* Credit Store */}
+                <CreditStore />
             </div>
         </div>
     );
