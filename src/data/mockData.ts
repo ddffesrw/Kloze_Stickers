@@ -38,6 +38,8 @@ export const categories: Category[] = [
   { id: "6", name: "Meme", emoji: "🤣" },
   { id: "7", name: "Müzik", emoji: "🎵" },
   { id: "8", name: "Spor", emoji: "⚽" },
+  { id: "9", name: "Sanat", emoji: "🎨" },
+  { id: "10", name: "Psychedelic", emoji: "🍄" },
 ];
 
 export const trendingPacks: StickerPack[] = [

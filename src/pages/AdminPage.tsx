@@ -217,7 +217,7 @@ export default function AdminPage() {
   const fetchComfyHistory = async () => {
     setLoadingComfy(true);
     try {
-      const history = await getComfyHistory(10, comfyUrl); // Fetch last 10 generations with custom URL
+      const history = await getComfyHistory(20, comfyUrl); // Fetch last 20 generations with custom URL
       setComfyImages(history);
       // Data format check
       if (history.length === 0) toast.info("ComfyUI geçmişi boş veya bağlantı yok");
