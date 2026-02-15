@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useUserCredits } from "@/hooks/useUserCredits";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { Settings, ChevronRight, Crown, LogOut, Bell, Palette, Shield, HelpCircle, Coins, Star, Zap, Gift, Camera, Trash2, Package, Edit, MessageCircle, Share2, MoreVertical } from "lucide-react";
+import { Settings, ChevronRight, Crown, LogOut, Bell, Palette, Shield, HelpCircle, Coins, Star, Zap, Gift, Camera, Trash2, Package, Edit, MessageCircle, Share2, MoreVertical, StarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AvatarSelector } from "@/components/kloze/AvatarSelector";
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { downloadWhatsAppPack } from "@/services/whatsappService";
 import { toast } from "sonner";
-import { AdBanner } from "@/components/kloze/AdBanner";
+// AdBanner removed
 import { Loader2, AlertCircle, Plus, X, Image as ImageIcon } from "lucide-react";
 import {
   Dialog,
@@ -33,10 +33,12 @@ import {
 import { monetizationService } from "@/services/monetizationService";
 import { PurchasesPackage } from "@revenuecat/purchases-capacitor";
 import { ProModal } from "@/components/monetization/ProModal";
+import { requestAppReview } from "@/components/kloze/AppReviewPrompt";
 
 // ... existing code ...
 
 export default function ProfilePage() {
+  const navigate = useNavigate();
   const [userAvatar, setUserAvatar] = useState(defaultAvatar);
   const [userId, setUserId] = useState<string>("");
   const [currentEmail, setCurrentEmail] = useState<string>("");
@@ -397,6 +399,7 @@ export default function ProfilePage() {
     { icon: Palette, label: "Görünüm", description: "Tema ve renk tercihleri" },
     { icon: Shield, label: "Gizlilik", description: "Hesap güvenliği" },
     { icon: HelpCircle, label: "Yardım", description: "SSS ve destek" },
+    { icon: Star, label: "Değerlendir", description: "Play Store'da yorum yap", action: "review" },
   ];
 
   const stats = [
@@ -549,6 +552,34 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        {/* Compact Credit Balance Bar */}
+        <div className="glass-card rounded-2xl p-3 border border-secondary/20 flex items-center justify-between relative overflow-hidden group">
+          <div className="absolute inset-0 bg-secondary/5 opacity-0 group-hover:opacity-10 transition-opacity" />
+
+          <div className="flex items-center gap-3 relative z-10">
+            <div className="w-10 h-10 rounded-xl bg-secondary/20 flex items-center justify-center glow-cyan">
+              <Coins className="w-5 h-5 text-secondary" />
+            </div>
+            <div className="flex flex-col leading-none gap-1">
+              <span className="text-xs text-muted-foreground font-medium">Kredi Bakiyesi</span>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl font-black text-foreground">{credits}</span>
+                <span className="text-[10px] text-muted-foreground opacity-70">{isPro ? 'PRO' : 'GÜNLÜK'}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 relative z-10">
+            <Link to="/credits">
+              <Button size="sm" className="h-9 px-4 rounded-xl gradient-secondary text-secondary-foreground font-bold text-xs shadow-lg shadow-secondary/20 hover:shadow-cyan-500/30 transition-all hover:scale-105 active:scale-95">
+                <Gift className="w-3.5 h-3.5 mr-1.5" />
+                Yükle
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+
         {/* MY PACKS */}
         <div className="space-y-3">
           <h3 className="text-sm font-bold text-muted-foreground px-1">Paketlerim ({packs.length})</h3>
@@ -581,7 +612,7 @@ export default function ProfilePage() {
                             <span>WhatsApp</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => {
-                            navigator.clipboard.writeText(`${window.location.origin}/pack/${pack.id}`);
+                            navigator.clipboard.writeText(`https://kloze.app/pack/${pack.id}`);
                             toast.success("Link kopyalandı!");
                           }}>
                             <Share2 className="w-4 h-4 mr-2" />
@@ -712,30 +743,7 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {/* Credits Card */}
-        <div className="glass-card rounded-3xl p-5 border border-secondary/30 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-secondary/20 rounded-full blur-3xl" />
 
-          <div className="relative flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-secondary/20 flex items-center justify-center glow-cyan">
-                <Coins className="w-7 h-7 text-secondary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Kredi Bakiyesi</p>
-                <p className="text-3xl font-black text-secondary">{credits}</p>
-                {/* Credits fetched from DB */}
-                <p className="text-[10px] text-muted-foreground">{isPro ? 'Pro Limit' : 'Günlük Limit'}</p>
-              </div>
-            </div>
-            <Button
-              className="rounded-2xl gradient-secondary text-secondary-foreground font-bold glow-cyan"
-            >
-              <Gift className="w-4 h-4 mr-2" />
-              Kredi Al
-            </Button>
-          </div>
-        </div>
 
         {/* Go Pro Banner */}
         {!isPro && (
@@ -770,12 +778,23 @@ export default function ProfilePage() {
             {settingsItems.map((item, index) => (
               <button
                 key={item.label}
-                onClick={() => {
+                onClick={async () => {
                   if (item.label === "Yardım") {
                     window.location.href = "mailto:johnaxe.storage@gmail.com";
                   } else if (item.label === "Gizlilik") {
-                    // Navigate to legal handled by separate button, but let's link it here too
-                    window.location.href = "/legal";
+                    // Navigate to legal page
+                    // Since we are in a mapped function, we cant easily use hook here if not defined above. 
+                    // ProfilePage has no 'navigate' hook defined in the snippet I saw?
+                    // Let's check imports.
+                    // It imports Link but no useNavigate?
+                    // I need to add useNavigate to imports and component.
+                    navigate("/legal"); // Changed from window.location.href
+                  } else if (item.label === "Değerlendir") {
+                    await requestAppReview();
+                  } else if (item.label === "Bildirimler" || item.label === "Görünüm") {
+                    navigate("/settings"); // Changed from window.location.href
+                    // Ideally use navigate() but I need to check if I can add the hook easily.
+                    // The file is large. I will use window.location.href for safety or better: add navigate.
                   } else {
                     toast.info("Bu özellik yakında gelecek!");
                   }
@@ -851,12 +870,7 @@ export default function ProfilePage() {
           <p className="mt-1">v1.0.0 • Kloze Inc.</p>
         </div>
 
-        {/* Sticky Ad Banner (Pro değilse) */}
-        {!isPro && (
-          <div className="fixed bottom-[90px] left-4 right-4 z-30">
-            <AdBanner className="shadow-2xl border-primary/20 bg-background/80 backdrop-blur-md" />
-          </div>
-        )}
+        {/* Ad Banner removed */}
 
         {/* Pack Selector Modal */}
         <PackSelectorModal

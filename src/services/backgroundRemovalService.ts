@@ -43,29 +43,44 @@ export async function removeBackground(input: string | Blob): Promise<Blob> {
     imageBlob = input;
   }
 
-  // ========== LOCAL @imgly ONLY (HF API has CORS issues from browser) ==========
+  // ========== LOCAL @imgly WITH TIMEOUT (WASM can hang on mobile) ==========
   try {
     console.log('[BackgroundService] 🎯 Using local @imgly...');
 
-    const { removeBackground: removeBackgroundImgly } = await import("@imgly/background-removal");
+    const BG_REMOVAL_TIMEOUT_MS = 45000; // 45 seconds (WASM + model download can take time on first run)
 
     const imageUrl = URL.createObjectURL(imageBlob);
-    const result = await removeBackgroundImgly(imageUrl, {
-      progress: (key, current, total) => {
-        // Silenced for speed, or emit to console if debugging
-        // console.log(`[BG] ${key}: ${Math.round((current / total) * 100)}%`);
-      },
-      debug: false,
-      model: 'isnet_fp16', // Fast FP16 model (smaller than quint8 for this lib)
-      output: {
-        format: 'image/png',
-        quality: 0.8, // Slightly reduce quality for speed
-      }
-    });
-    URL.revokeObjectURL(imageUrl);
+    try {
+      // Wrap EVERYTHING (dynamic import + processing) inside the timeout
+      let timeoutId: ReturnType<typeof setTimeout>;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Background removal timeout (45s)')), BG_REMOVAL_TIMEOUT_MS);
+      });
 
-    console.log('[BackgroundService] ✅ Local @imgly succeeded');
-    return result;
+      const processingPromise = (async () => {
+        const { removeBackground: removeBackgroundImgly } = await import("@imgly/background-removal");
+        return removeBackgroundImgly(imageUrl, {
+          publicPath: '/imgly/', // Force usage of local assets (copied via vite-plugin-static-copy)
+          progress: (key, current, total) => {
+            console.log(`[BG] ${key}: ${Math.round((current / total) * 100)}%`);
+          },
+          debug: false,
+          model: 'isnet_fp16', // Fast FP16 model (smaller than quint8 for this lib)
+          output: {
+            format: 'image/png',
+            quality: 0.8, // Slightly reduce quality for speed
+          }
+        });
+      })();
+
+      const result = await Promise.race([processingPromise, timeoutPromise]);
+      clearTimeout(timeoutId!); // Clean up timer on success
+
+      console.log('[BackgroundService] ✅ Local @imgly succeeded');
+      return result;
+    } finally {
+      URL.revokeObjectURL(imageUrl);
+    }
   } catch (localError) {
     console.warn('[BackgroundService] ⚠️ Local @imgly failed:', localError);
   }
@@ -76,6 +91,9 @@ export async function removeBackground(input: string | Blob): Promise<Blob> {
 
     const base64Image = await blobToBase64(imageBlob);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout for API
+
     const response = await fetch(`${HF_SPACE_URL}/api/predict`, {
       method: 'POST',
       headers: {
@@ -83,8 +101,11 @@ export async function removeBackground(input: string | Blob): Promise<Blob> {
       },
       body: JSON.stringify({
         data: [base64Image]
-      })
+      }),
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (response.ok) {
       const result = await response.json();
@@ -106,9 +127,9 @@ export async function removeBackground(input: string | Blob): Promise<Blob> {
     console.warn('[BackgroundService] ⚠️ Gradio Space error:', gradioError);
   }
 
-  // All methods failed - return original image
-  console.warn('[BackgroundService] ❌ All methods failed, returning original image');
-  return imageBlob;
+  // All methods failed - throw so caller knows it failed
+  console.error('[BackgroundService] ❌ All methods failed');
+  throw new Error('Arka plan silme başarısız oldu. Orijinal görsel kullanılacak.');
 }
 
 /**
@@ -134,13 +155,7 @@ export async function removeBackgroundWithRetry(
     }
   }
 
-  // All retries failed, return original image
-  console.error('[BackgroundService] All retries failed, returning original image');
-
-  if (imageUrl instanceof Blob) {
-    return imageUrl;
-  } else {
-    const response = await fetch(imageUrl);
-    return await response.blob();
-  }
+  // All retries failed - throw so caller can handle gracefully
+  console.error('[BackgroundService] All retries failed');
+  throw lastError || new Error('Arka plan silme tüm denemelerde başarısız oldu');
 }

@@ -15,12 +15,20 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import android.app.Activity
 import java.io.File
 import java.io.FileOutputStream
 import java.io.ByteArrayOutputStream
 
-@CapacitorPlugin(name = "WhatsAppStickers")
+private fun logd(tag: String, msg: String) {
+    Log.d(tag, msg)
+}
+
+@CapacitorPlugin(name = "WhatsAppStickers", requestCodes = [200])
 class WhatsAppStickersPlugin : Plugin() {
+
+    @Volatile
+    private var savedCallbackId: String? = null
 
     companion object {
         private const val TAG = "WhatsAppStickers"
@@ -57,6 +65,11 @@ class WhatsAppStickersPlugin : Plugin() {
             val stickers = call.getArray("stickers")
 
             Log.d(TAG, "addStickerPack called: identifier=$identifier, name=$name")
+
+            // Identifier validation
+            if (identifier != null && identifier.contains("-")) {
+                Log.w(TAG, "WARNING: Identifier contains hyphens. Some WhatsApp versions may reject this.")
+            }
 
             if (identifier.isNullOrEmpty() || name.isNullOrEmpty() ||
                 publisher.isNullOrEmpty() || trayImage.isNullOrEmpty() || stickers == null) {
@@ -248,12 +261,12 @@ class WhatsAppStickersPlugin : Plugin() {
                         try {
                             activity.runOnUiThread {
                                 try {
-                                    // startActivityForResult is REQUIRED for WhatsApp to identify the source app
-                                    activity.startActivityForResult(intent, ADD_PACK_REQUEST_CODE)
-                                    val ret = JSObject()
-                                    ret.put("success", true)
-                                    ret.put("message", "Sticker paketi WhatsApp'a gönderildi")
-                                    call.resolve(ret)
+                                    // Save the call so we can resolve it in handleOnActivityResult
+                                    bridge.saveCall(call)
+                                    savedCallbackId = call.callbackId
+                                    // Use Capacitor's startActivityForResult so result is properly routed
+                                    startActivityForResult(call, intent, ADD_PACK_REQUEST_CODE)
+                                    Log.d(TAG, "Intent launched, waiting for WhatsApp result...")
                                 } catch (e: ActivityNotFoundException) {
                                     Log.e(TAG, "ActivityNotFoundException despite resolveActivity check", e)
                                     call.reject("WhatsApp başlatılamadı", "WHATSAPP_NOT_FOUND", e)
@@ -264,8 +277,8 @@ class WhatsAppStickersPlugin : Plugin() {
                             call.reject("UI Thread hatası: ${e.message}")
                         }
                     } else {
-                        // Fallback
-                        Log.w(TAG, "No Activity found! WhatsApp sticker addition might fail or not return result.")
+                        // Fallback — no activity context
+                        Log.w(TAG, "No Activity found! Using context.startActivity fallback.")
                         try {
                             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             context.startActivity(intent)
@@ -286,6 +299,65 @@ class WhatsAppStickersPlugin : Plugin() {
         } catch (e: Exception) {
             Log.e(TAG, "Error initiating sticker pack thread", e)
             call.reject("Hata: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Handle the result from WhatsApp's sticker pack activity.
+     * This is called when WhatsApp returns after the user adds/cancels the sticker pack.
+     */
+    override fun handleOnActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.handleOnActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == ADD_PACK_REQUEST_CODE) {
+            Log.d(TAG, ">>> WhatsApp RESULT: requestCode=$requestCode, resultCode=$resultCode")
+            
+            // Log ALL extras from WhatsApp's response
+            if (data?.extras != null) {
+                data.extras?.keySet()?.forEach { key ->
+                    Log.d(TAG, ">>> WhatsApp extra: $key = ${data.extras?.get(key)}")
+                }
+            } else {
+                Log.d(TAG, ">>> WhatsApp returned NO extras")
+            }
+
+            // Check for validation error from WhatsApp
+            val validationError = data?.getStringExtra("validation_error")
+            if (validationError != null) {
+                Log.e(TAG, ">>> WhatsApp VALIDATION ERROR: $validationError")
+            }
+
+            val ret = JSObject()
+            if (resultCode == Activity.RESULT_OK) {
+                Log.d(TAG, ">>> WhatsApp ACCEPTED the sticker pack!")
+                ret.put("success", true)
+                ret.put("message", "Sticker paketi WhatsApp'a başarıyla eklendi!")
+            } else if (resultCode == Activity.RESULT_CANCELED) {
+                Log.w(TAG, ">>> WhatsApp REJECTED or user CANCELLED. resultCode=RESULT_CANCELED")
+                ret.put("success", false)
+                ret.put("message", validationError ?: "WhatsApp sticker paketini reddetti veya işlem iptal edildi")
+                ret.put("errorCode", "WHATSAPP_REJECTED")
+            } else {
+                Log.w(TAG, ">>> WhatsApp returned unknown resultCode: $resultCode")
+                ret.put("success", false)
+                ret.put("message", "Bilinmeyen sonuç kodu: $resultCode")
+                ret.put("errorCode", "UNKNOWN_RESULT")
+            }
+
+            // Try to resolve the saved call
+            val cbId = savedCallbackId
+            if (cbId != null) {
+                val savedCall = bridge.getSavedCall(cbId)
+                if (savedCall != null) {
+                    savedCall.resolve(ret)
+                    bridge.releaseCall(cbId)
+                } else {
+                    Log.w(TAG, "Saved call not found for callbackId=$cbId")
+                }
+                savedCallbackId = null
+            } else {
+                Log.w(TAG, "No savedCallbackId available. WhatsApp result: $ret")
+            }
         }
     }
 

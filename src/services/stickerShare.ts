@@ -103,8 +103,8 @@ export async function shareToWhatsApp(
       const stage = prog.stage === 'checking' || prog.stage === 'downloading_tray' || prog.stage === 'downloading_stickers'
         ? 'converting'
         : prog.stage === 'preparing'
-        ? 'saving'
-        : 'sharing';
+          ? 'saving'
+          : 'sharing';
 
       onProgress?.({
         stage,
@@ -150,7 +150,7 @@ export async function shareToTelegram(
       total: stickerUrls.length,
       message: 'Stickerlar hazırlanıyor...'
     });
-    
+
     const convertedStickers = await convertMultipleStickers(
       stickerUrls,
       'telegram',
@@ -163,25 +163,25 @@ export async function shareToTelegram(
         });
       }
     );
-    
+
     // Telegram Bot API ile paket oluşturma backend'de yapılacak
     // Şimdilik genel paylaşım kullanıyoruz
-    
+
     const platform = getPlatform();
-    
+
     if (platform === 'web') {
       // Web'de Telegram mesaj paylaşım linki
       const shareText = encodeURIComponent(
         `${packName} sticker paketi - Kloze Stickers'tan indir!`
       );
       window.open(`https://t.me/share/url?url=${window.location.href}&text=${shareText}`, '_blank');
-      
+
       return {
         success: true,
         message: 'Telegram açıldı!'
       };
     }
-    
+
     // Native'de Share API kullan
     await Share.share({
       title: packName,
@@ -189,12 +189,12 @@ export async function shareToTelegram(
       url: window.location.href,
       dialogTitle: 'Telegram ile Paylaş'
     });
-    
+
     return {
       success: true,
       message: 'Paylaşım başarılı!'
     };
-    
+
   } catch (error) {
     console.error('Telegram paylaşım hatası:', error);
     return {
@@ -210,16 +210,17 @@ export async function shareToTelegram(
  */
 export async function shareGeneral(
   packName: string,
-  description: string
+  description: string,
+  url?: string
 ): Promise<ShareResult> {
   try {
     await Share.share({
       title: packName,
       text: description,
-      url: window.location.href,
+      url: url || window.location.href,
       dialogTitle: 'Paylaş'
     });
-    
+
     return {
       success: true,
       message: 'Paylaşım başarılı!'

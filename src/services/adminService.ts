@@ -19,17 +19,23 @@ export async function adminAddCredits(userId: string, amount: number) {
 
 /**
  * Toggle Pro Status (Admin Only)
+ * Now directly updates profiles table instead of RPC
  */
 export async function adminTogglePro(userId: string, status: boolean) {
-    const { data, error } = await supabase.rpc('admin_toggle_pro', {
-        target_user_id: userId,
-        status: status
-    });
+    // Direct update to profiles table
+    const { data, error } = await supabase
+        .from('profiles')
+        .update({ is_pro: status })
+        .eq('id', userId)
+        .select()
+        .single();
 
     if (error) {
         console.error("Admin toggle pro error:", error);
         throw error;
     }
+
+    console.log("Pro status updated:", { userId, status, result: data });
     return data;
 }
 

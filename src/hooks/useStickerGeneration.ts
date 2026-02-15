@@ -9,6 +9,7 @@ import {
   type GenerationProgress,
   type GeneratedStickerResult
 } from '@/services/stickerGenerationService';
+import { consumeRateLimit, RATE_LIMITS, formatResetTime } from '@/services/rateLimitService';
 
 export interface UseStickerGenerationReturn {
   generate: (prompt: string, provider?: 'runware' | 'huggingface' | 'dalle', removeBg?: boolean) => Promise<GeneratedStickerResult | null>;
@@ -63,7 +64,17 @@ export function useStickerGeneration(userId: string): UseStickerGenerationReturn
     setProgress(null);
 
     try {
-      const requiredCredits = provider === 'dalle' ? 5 : (provider === 'runware' ? 1 : 0);
+      // Rate limit kontrolü
+      const { allowed, result: rateResult } = await consumeRateLimit(
+        userId,
+        RATE_LIMITS.STICKER_GENERATION
+      );
+
+      if (!allowed) {
+        throw new Error(`Çok fazla istek! ${formatResetTime(rateResult.resetAt)} sonra tekrar dene.`);
+      }
+
+      const requiredCredits = provider === 'dalle' ? 5 : (provider === 'runware' ? 3 : 1);
       if (credits < requiredCredits) {
         throw new Error(`Yetersiz kredi. Bu işlem ${requiredCredits} kredi gerektirir.`);
       }

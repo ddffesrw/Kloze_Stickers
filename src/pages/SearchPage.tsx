@@ -1,14 +1,17 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Search, X, TrendingUp, Sparkles, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { CategoryPill } from "@/components/kloze/CategoryPill";
 import { PackCard } from "@/components/kloze/PackCard";
+import { CreditBadge } from "@/components/kloze/CreditBadge";
+import { WatchAdButton, getGuestCredits, setGuestCredits } from "@/components/kloze/WatchAdButton";
 import { categories } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { getAllStickerPacks, searchStickerPacks } from "@/services/stickerPackService";
 import { ComingSoonCard } from "@/components/kloze/ComingSoonCard";
 import { getBlockedUsers } from "@/services/blockService";
-import { auth } from "@/lib/supabase";
+import { auth, supabase } from "@/lib/supabase";
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
@@ -17,6 +20,9 @@ export default function SearchPage() {
   const [allPacks, setAllPacks] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
+  const [credits, setCredits] = useState(0);
+  const [isPro, setIsPro] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   // Fetch real packs from Supabase
   useEffect(() => {
@@ -29,8 +35,20 @@ export default function SearchPage() {
         setAllPacks(packs || []);
 
         if (user) {
-          const blockedIds = await getBlockedUsers();
+          setUserId(user.id);
+          const [blockedIds, profile] = await Promise.all([
+            getBlockedUsers(),
+            supabase.from('profiles').select('credits, is_pro').eq('id', user.id).single()
+          ]);
           setBlockedUserIds(new Set(blockedIds));
+          if (profile.data) {
+            setCredits(profile.data.credits || 0);
+            setIsPro(profile.data.is_pro || false);
+          }
+        } else {
+          // Guest User: Read Local Storage
+          const guestCredits = getGuestCredits();
+          setCredits(guestCredits);
         }
       } catch (e) {
         console.error("Packs load error:", e);
@@ -39,6 +57,17 @@ export default function SearchPage() {
       }
     };
     loadPacks();
+
+    // Listen for guest credit updates
+    const handleGuestCreditsUpdate = () => {
+      const guestCredits = getGuestCredits();
+      setCredits(guestCredits);
+    };
+    window.addEventListener('guest-credits-updated', handleGuestCreditsUpdate);
+
+    return () => {
+      window.removeEventListener('guest-credits-updated', handleGuestCreditsUpdate);
+    };
   }, []);
 
   const toggleCategory = (categoryName: string) => {
@@ -74,13 +103,44 @@ export default function SearchPage() {
       {/* Header */}
       <header className="sticky top-0 z-40 glass-card border-b border-border/20">
         <div className="p-4 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-secondary/20 flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-secondary" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-secondary/20 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-secondary" />
+              </div>
+              <div>
+                <h1 className="text-xl font-black gradient-text-alt">KEŞFET</h1>
+                <p className="text-[10px] text-muted-foreground -mt-1">Binlerce sticker paketi</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-black gradient-text-alt">KEŞFET</h1>
-              <p className="text-[10px] text-muted-foreground -mt-1">Binlerce sticker paketi</p>
+            <div className="flex items-center gap-2">
+              {!isPro && (
+                <WatchAdButton
+                  onCreditEarned={() => {
+                    auth.getCurrentUser().then(async user => {
+                      if (user) {
+                        const { data: profile } = await supabase
+                          .from('profiles')
+                          .select('credits')
+                          .eq('id', user.id)
+                          .single();
+                        if (profile) setCredits(profile.credits || 0);
+                      } else {
+                        // GUEST: Read from local storage
+                        const guestCredits = getGuestCredits();
+                        setCredits(guestCredits);
+                      }
+                    });
+                  }}
+                />
+              )}
+              <CreditBadge credits={credits} isPro={isPro} />
+
+              {!userId && (
+                <Link to="/auth" className="text-sm font-bold bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:opacity-90 transition-opacity">
+                  Giriş Yap
+                </Link>
+              )}
             </div>
           </div>
 

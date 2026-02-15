@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Share2, Heart, MessageCircle, Download, Crown, Sparkles, Send, Loader2, Flag, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Share2, Heart, MessageCircle, Download, Crown, Sparkles, Send, Loader2, Flag, ShieldAlert, Play, Gift } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { StickerCard } from "@/components/kloze/StickerCard";
@@ -18,21 +18,28 @@ import { getStickerPackById } from "@/services/stickerPackService";
 import { toast } from "sonner";
 import { blockUser } from "@/services/blockService";
 import { ReportModal } from "@/components/kloze/ReportModal";
+import { WatchAdButton, getGuestCredits, setGuestCredits } from "@/components/kloze/WatchAdButton";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ProModal } from "@/components/monetization/ProModal";
 
 export default function PackDetailPage() {
   const { id } = useParams();
+  const { userId: currentUserId, credits, isPro, refreshCredits: refreshAuthCredits, setCreditsLocal } = useAuth();
   const [pack, setPack] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
+  const [showAdPrompt, setShowAdPrompt] = useState(false);
+  const [showProModal, setShowProModal] = useState(false);
 
   // Sticker share hook (MOTOR BAĞLANTISI)
   const {
@@ -45,7 +52,7 @@ export default function PackDetailPage() {
     reset
   } = useStickerShare();
 
-  // Pack'i Supabase'den çek
+  // Pack'i Supabase'den çek (auth info comes from context - no delay)
   useEffect(() => {
     const fetchPack = async () => {
       if (!id) return;
@@ -56,7 +63,6 @@ export default function PackDetailPage() {
 
         if (packData) {
           setPack(packData);
-          setIsFavorite(false); // TODO: User favorites'tan çek
         }
       } catch (error) {
         console.error('Pack fetch error:', error);
@@ -70,10 +76,78 @@ export default function PackDetailPage() {
   }, [id]);
 
   /**
+   * Check & deduct credits. Returns true if allowed.
+   * Normal packs: 1 credit, Premium packs: 2 credits
+   */
+  const getRequiredCredits = (): number => {
+    if (!pack) return 1;
+    return (pack.is_premium || pack.isPremium) ? 2 : 1;
+  };
+
+  /**
+   * Sadece kredi yeterli mi kontrol et (düşme!)
+   */
+  const checkCreditsAvailable = async (): Promise<boolean> => {
+    // Pro users bypass
+    if (isPro) return true;
+
+    const required = getRequiredCredits();
+
+    if (currentUserId) {
+      if (credits < required) {
+        setShowAdPrompt(true);
+        return false;
+      }
+    } else {
+      const guestCredits = getGuestCredits();
+      if (guestCredits < required) {
+        setShowAdPrompt(true);
+        return false;
+      }
+    }
+    return true;
+  };
+
+  /**
+   * Krediyi düş (başarılı aktarımdan sonra çağrılır)
+   */
+  const deductCredits = async () => {
+    if (isPro) return;
+
+    const required = getRequiredCredits();
+
+    if (currentUserId) {
+      const { error } = await supabase.rpc('deduct_credits', { amount: required });
+      if (error) {
+        console.error('Kredi düşme hatası:', error.message);
+      }
+      setCreditsLocal(credits - required);
+    } else {
+      const guestCredits = getGuestCredits();
+      setGuestCredits(guestCredits - required);
+      setCreditsLocal(guestCredits - required);
+      window.dispatchEvent(new Event('guest-credits-updated'));
+    }
+  };
+
+  /**
+   * Refresh credits after watching ad
+   */
+  const refreshCredits = async () => {
+    await refreshAuthCredits();
+    setShowAdPrompt(false);
+  };
+
+  /**
    * WHATSAPP'A GÖNDER - NATIVE BRIDGE TETİKLEME
+   * Kredi ancak başarılı aktarımdan SONRA düşülür
    */
   const handleWhatsAppShare = async () => {
     if (!pack) return;
+
+    // Credit check (sadece yeterli kredi var mı kontrol et, düşme)
+    const hasCredits = await checkCreditsAvailable();
+    if (!hasCredits) return;
 
     // Validation
     const stickerUrls = pack.stickers.map((s: any) => s.image_url);
@@ -91,19 +165,35 @@ export default function PackDetailPage() {
 
     reset();
     // NATIVE BRIDGE TETİKLE
-    await shareWhatsApp(pack.name, pack.publisher, stickerUrls);
+    const result = await shareWhatsApp(pack.name, pack.publisher, stickerUrls);
+
+    // Kredi sadece başarılıysa düşülür
+    if (result.success) {
+      await deductCredits();
+    }
   };
 
   const handleTelegramShare = async () => {
     if (!pack) return;
+
+    // Credit check (sadece yeterli kredi var mı kontrol et, düşme)
+    const hasCredits = await checkCreditsAvailable();
+    if (!hasCredits) return;
+
     reset();
     const stickerUrls = pack.stickers.map((s: any) => s.image_url);
-    await shareTelegram(pack.name, stickerUrls);
+    const result = await shareTelegram(pack.name, stickerUrls);
+
+    // Kredi sadece başarılıysa düşülür
+    if (result.success) {
+      await deductCredits();
+    }
   };
 
   const handleGeneralShare = async () => {
     if (!pack) return;
-    await shareOther(pack.name, `${pack.name} sticker paketi - Kloze Stickers`);
+    const shareUrl = `https://kloze.app/pack/${pack.id}`;
+    await shareOther(pack.name, `${pack.name} sticker paketi - Kloze Stickers`, shareUrl);
   };
 
   const progressPercentage = progress
@@ -160,7 +250,13 @@ export default function PackDetailPage() {
           </Link>
           <div className="flex gap-2">
             <button
-              onClick={() => setIsFavorite(!isFavorite)}
+              onClick={() => {
+                if (!currentUserId) {
+                  toast.error("Favorilere eklemek için giriş yapmalısınız 🔒");
+                  return;
+                }
+                setIsFavorite(!isFavorite);
+              }}
               className={cn(
                 "p-3 rounded-2xl glass-card border transition-all hover:scale-105",
                 isFavorite ? "border-accent/50 bg-accent/10" : "border-border/30"
@@ -186,12 +282,22 @@ export default function PackDetailPage() {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48 bg-background/95 backdrop-blur-xl border-border/50">
-                <DropdownMenuItem onClick={() => setReportModalOpen(true)}>
+                <DropdownMenuItem onClick={() => {
+                  if (!currentUserId) {
+                    toast.error("Raporlamak için giriş yapmalısınız");
+                    return;
+                  }
+                  setReportModalOpen(true);
+                }}>
                   <Flag className="w-4 h-4 mr-2 text-destructive" />
                   <span className="text-destructive">İçeriği Rapor Et</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={async () => {
+                    if (!currentUserId) {
+                      toast.error("Engellemek için giriş yapmalısınız");
+                      return;
+                    }
                     if (confirm("Bu kullanıcıyı engellemek istediğine emin misin? Artık bu kullanıcının hiçbir içeriğini görmeyeceksin.")) {
                       setIsBlocking(true);
                       const res = await blockUser(pack.user_id);
@@ -249,7 +355,7 @@ export default function PackDetailPage() {
                 </div>
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20">
                   <Download className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-bold text-primary">{(pack.downloads || 0).toLocaleString()}</span>
+                  <span className="text-sm font-bold text-primary">{((pack as any).display_downloads ?? pack.downloads ?? 0).toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -306,6 +412,55 @@ export default function PackDetailPage() {
             </AlertDescription>
           </Alert>
         )}
+
+        {/* Credit Info Banner */}
+        {!isPro && (
+          <div className="flex items-center justify-between p-3 rounded-2xl bg-muted/30 border border-border/20">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-primary/20 flex items-center justify-center">
+                <Gift className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-foreground">
+                  {credits > 0 ? `${credits} kredin var` : 'Kredin yok'}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Bu paket = {getRequiredCredits()} kredi {(pack?.is_premium || pack?.isPremium) ? '👑' : ''}
+                </p>
+              </div>
+            </div>
+            <WatchAdButton onCreditEarned={refreshCredits} />
+          </div>
+        )}
+
+        {/* Ad Prompt Dialog */}
+        <Dialog open={showAdPrompt} onOpenChange={setShowAdPrompt}>
+          <DialogContent className="glass-card border-border/30">
+            <DialogHeader>
+              <DialogTitle className="text-center">
+                🎬 Kredi Gerekli
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4 text-center">
+              <div className="w-20 h-20 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+                <Play className="w-10 h-10 text-primary" />
+              </div>
+              <p className="text-muted-foreground">
+                Sticker paketini indirmek için <strong>{getRequiredCredits()} kredi</strong> gerekiyor.
+                Kısa bir reklam izleyerek <strong>2 kredi</strong> kazan!
+              </p>
+              <div className="flex justify-center">
+                <WatchAdButton
+                  onCreditEarned={refreshCredits}
+                  className="!px-6 !py-3 !text-base"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                veya <Link to="/credits" className="text-primary font-bold hover:underline">Pro Üyelik</Link> ile sınırsız indir
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Progress Dialog */}
         <Dialog open={isSharing || !!result} onOpenChange={() => { if (!isSharing) reset(); }}>
@@ -371,6 +526,13 @@ export default function PackDetailPage() {
         onClose={() => setReportModalOpen(false)}
         packId={pack.id}
         packTitle={pack.name}
+      />
+
+      {/* Pro Upsell Modal */}
+      <ProModal
+        open={showProModal}
+        onOpenChange={setShowProModal}
+        onSuccess={() => refreshAuthCredits()}
       />
     </div>
   );

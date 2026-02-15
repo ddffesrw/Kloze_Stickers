@@ -13,7 +13,21 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase credentials not found. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    persistSession: true,
+    autoRefreshToken: true,
+    // Native platforms handle deep links manually in App.tsx
+    detectSessionInUrl: typeof window !== 'undefined' && !('Capacitor' in window),
+    // CRITICAL: Use implicit flow for native OAuth.
+    // PKCE flow stores code_verifier in browser localStorage, but ExternalBrowserPlugin
+    // opens the system browser (not Chrome Custom Tabs). When the redirect comes back
+    // to the app's WebView, the code_verifier is lost (different localStorage).
+    // Implicit flow sends access_token + refresh_token directly in the URL fragment.
+    flowType: 'implicit',
+  },
+});
 
 /**
  * Database Types
@@ -34,12 +48,14 @@ export interface Database {
           tray_image_url: string;
           category: string;
           is_premium: boolean;
+          is_featured: boolean;
           downloads: number;
+          display_downloads: number | null;
           likes_count: number;
           created_at: string;
           updated_at: string;
         };
-        Insert: Omit<Database['public']['Tables']['sticker_packs']['Row'], 'id' | 'created_at' | 'updated_at' | 'downloads' | 'likes_count'>;
+        Insert: Omit<Database['public']['Tables']['sticker_packs']['Row'], 'id' | 'created_at' | 'updated_at' | 'downloads' | 'likes_count' | 'is_featured' | 'display_downloads'>;
         Update: Partial<Database['public']['Tables']['sticker_packs']['Insert']>;
       };
       stickers: {

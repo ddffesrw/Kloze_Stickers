@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Sparkles, Coins, RotateCcw, Wand2, Zap, Check, AlertCircle, Loader2, Crown, Play, Lock } from "lucide-react";
+import { Sparkles, Wand2, Zap, Check, AlertCircle, Loader2, Crown, Construction } from "lucide-react";
+import { CreditBadge } from "@/components/kloze/CreditBadge";
+import { WatchAdButton } from "@/components/kloze/WatchAdButton";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -9,9 +11,11 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { aiStyles } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { useStickerGeneration } from "@/hooks/useStickerGeneration";
-import { auth, supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { checkPromptSafety, getSafetyWarningMessage } from "@/services/moderationService";
+import { getSetting } from "@/services/appSettingsService";
 import { getDraftStickers, type Sticker } from "@/services/stickerService";
 import { createStickerPack, type StickerPack } from "@/services/stickerPackService";
 import { downloadWhatsAppPack, downloadAllStickers } from "@/services/whatsappService";
@@ -19,37 +23,30 @@ import { Package, X, CheckCircle, Share2, Copy, Download, ExternalLink } from "l
 import { useNavigate } from "react-router-dom";
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AdMob, RewardAdPluginEvents, AdMobRewardItem } from "@capacitor-community/admob";
 import { Capacitor } from "@capacitor/core";
 import { GenerationProgressModal } from "@/components/kloze/GenerationProgressModal";
 import { NoCreditModal } from "@/components/kloze/NoCreditModal";
-
-// Background Removal Options
-type BgRemovalOption = 'off' | 'pro' | 'credit' | 'ad';
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
 
 export default function GeneratePage() {
   const navigate = useNavigate();
-  const [userId, setUserId] = useState<string>("");
+  const { userId, isPro, session } = useAuth();
   const [prompt, setPrompt] = useState("");
   const [selectedStyle, setSelectedStyle] = useState("3d");
   const [removeBackground, setRemoveBackground] = useState(true);
   const [generatedStickers, setGeneratedStickers] = useState<any[]>([]);
 
-  // Pro Status
-  const [isPro, setIsPro] = useState(false);
-
-  // BG Removal Modal
-  const [showBgModal, setShowBgModal] = useState(false);
-  const [bgRemovalUnlocked, setBgRemovalUnlocked] = useState(false); // Unlocked for this session via ad
-  const [isWatchingAd, setIsWatchingAd] = useState(false);
+  // Low-end device detection - disable heavy animations
+  const isLowEnd = typeof navigator !== 'undefined' && navigator.hardwareConcurrency ? navigator.hardwareConcurrency <= 4 : false;
 
   // Sticker Pool & Packaging
   const [drafts, setDrafts] = useState<Sticker[]>([]);
@@ -66,6 +63,8 @@ export default function GeneratePage() {
   // No Credit Modal State
   const [showNoCreditModal, setShowNoCreditModal] = useState(false);
   const [pendingProvider, setPendingProvider] = useState<'runware' | 'huggingface' | 'dalle' | null>(null);
+  const pendingProviderRef = useRef(pendingProvider);
+  pendingProviderRef.current = pendingProvider;
 
   // Sticker generation hook (MOTOR BAĞLANTISI)
   const {
@@ -79,25 +78,59 @@ export default function GeneratePage() {
     resetError
   } = useStickerGeneration(userId);
 
-  // User ID ve Pro Status al
+  // Check Maintenance Mode + Admin bypass (uses session from context - no async wait)
+  const ADMIN_EMAIL = "johnaxe.storage@gmail.com";
+  const isAdmin = session?.user?.email === ADMIN_EMAIL;
+  const [isMakerEnabled, setIsMakerEnabled] = useState<boolean | null>(null);
   useEffect(() => {
-    const getCurrentUser = async () => {
-      const user = await auth.getCurrentUser();
-      if (user) {
-        setUserId(user.id);
-
-        // Check Pro status from profiles table
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('is_pro')
-          .eq('id', user.id)
-          .single();
-
-        setIsPro(profile?.is_pro || false);
-      }
-    };
-    getCurrentUser();
+    getSetting("is_maker_enabled").then(makerVal => {
+      setIsMakerEnabled(makerVal !== undefined ? makerVal : false);
+    });
   }, []);
+
+  // Still loading settings - show nothing yet
+  if (isMakerEnabled === null) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (isMakerEnabled === false && !isAdmin) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Dialog open={true} onOpenChange={() => navigate('/')}>
+          <DialogContent className="glass-card border-border/30 max-w-sm mx-auto">
+            <div className="text-center py-4">
+              <div className="w-16 h-16 mx-auto bg-gradient-to-br from-primary to-secondary rounded-2xl flex items-center justify-center mb-5 shadow-lg shadow-primary/20">
+                <Construction className="w-8 h-8 text-white" />
+              </div>
+
+              <h2 className="text-xl font-black text-foreground mb-2">
+                Sticker Atölyesi
+              </h2>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 mb-4">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-xs font-bold text-amber-400">Yakında Aktif</span>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed mb-6">
+                AI destekli sticker üretim motoru üzerinde son rötuşları yapıyoruz.
+                Çok yakında kendi stickerlarını oluşturabileceksin!
+              </p>
+
+              <Button
+                onClick={() => navigate('/')}
+                className="w-full h-12 rounded-xl font-bold text-sm"
+              >
+                Paketleri Keşfet
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
 
   // Fetch Drafts
   const fetchDrafts = async () => {
@@ -126,6 +159,8 @@ export default function GeneratePage() {
    */
   // MOTOR TETİKLE (GENERIC)
   const handleGenerate = async (provider: 'runware' | 'huggingface' | 'dalle') => {
+    setPendingProvider(provider);
+
     if (!prompt.trim()) {
       toast.error("Lütfen bir prompt girin");
       return;
@@ -141,7 +176,7 @@ export default function GeneratePage() {
     // Kredi kontrolü
     let requiredCredits = 1;
     if (provider === 'runware') requiredCredits = 3;
-    if (provider === 'dalle') requiredCredits = 5;
+    if (provider === 'dalle') requiredCredits = 10;
 
     // Pro Lock Check for DALL-E
     if (provider === 'dalle' && !isPro) {
@@ -273,97 +308,13 @@ export default function GeneratePage() {
 
   /**
    * Handle Background Removal Toggle
-   * PRO users: Free, Others: Show modal for Credit/Ad options
+   * BG removal is done locally via @imgly WASM - completely free
+   * No credit charge needed, just toggle freely
    */
   const handleBgToggle = (checked: boolean) => {
-    if (!checked) {
-      // Turning off is always free
-      setRemoveBackground(false);
-      return;
-    }
-
-    // Turning on - check if user can use it
-    if (isPro || bgRemovalUnlocked) {
-      // PRO or already unlocked via ad this session
-      setRemoveBackground(true);
-    } else {
-      // Show modal for payment options
-      setShowBgModal(true);
-    }
+    setRemoveBackground(checked);
   };
 
-  /**
-   * Pay 1 Credit for BG Removal
-   */
-  const handlePayCredit = async () => {
-    if (credits < 1) {
-      setShowBgModal(false);
-      setShowNoCreditModal(true);
-      return;
-    }
-
-    try {
-      // Deduct 1 credit
-      const { error } = await supabase.rpc('deduct_credits', { amount: 1 });
-      if (error) throw error;
-
-      await refreshCredits();
-      setRemoveBackground(true);
-      setShowBgModal(false);
-      toast.success("Arka plan silme aktif! (-1 kredi)");
-    } catch (e) {
-      toast.error("Kredi düşürülemedi");
-    }
-  };
-
-  /**
-   * Watch Ad for Free BG Removal
-   */
-  const handleWatchAd = async () => {
-    if (!Capacitor.isNativePlatform()) {
-      // Web'de simüle et
-      toast.info("Reklam izleniyor... (Simülasyon)");
-      await new Promise(r => setTimeout(r, 2000));
-      setBgRemovalUnlocked(true);
-      setRemoveBackground(true);
-      setShowBgModal(false);
-      toast.success("Arka plan silme bu oturum için ücretsiz!");
-      return;
-    }
-
-    setIsWatchingAd(true);
-
-    try {
-      // Prepare reward ad
-      await AdMob.prepareRewardVideoAd({
-        adId: 'ca-app-pub-3940256099942544/5224354917' // Test ID, replace with real one
-      });
-
-      // Listen for reward
-      const rewardListener = await AdMob.addListener(
-        RewardAdPluginEvents.Rewarded,
-        (reward: AdMobRewardItem) => {
-          console.log('Reward received:', reward);
-          setBgRemovalUnlocked(true);
-          setRemoveBackground(true);
-          setShowBgModal(false);
-          toast.success("Arka plan silme bu oturum için ücretsiz!");
-        }
-      );
-
-      // Show ad
-      await AdMob.showRewardVideoAd();
-
-      // Cleanup listener after ad closes
-      setTimeout(() => rewardListener.remove(), 5000);
-
-    } catch (error) {
-      console.error('Ad error:', error);
-      toast.error("Reklam yüklenemedi. Daha sonra tekrar deneyin.");
-    } finally {
-      setIsWatchingAd(false);
-    }
-  };
 
 
 
@@ -374,12 +325,14 @@ export default function GeneratePage() {
 
   return (
     <div className="min-h-screen bg-background pb-28 relative">
-      {/* Background */}
-      <div className="fixed inset-0 mesh-gradient-intense opacity-40 pointer-events-none" />
-
-      {/* Animated Orbs */}
-      <div className="fixed top-1/4 left-1/4 w-64 h-64 rounded-full bg-primary/20 blur-[120px] animate-pulse-glow pointer-events-none" />
-      <div className="fixed bottom-1/4 right-1/4 w-48 h-48 rounded-full bg-secondary/20 blur-[100px] animate-pulse-glow pointer-events-none" style={{ animationDelay: '1s' }} />
+      {/* Background - skip heavy effects on low-end devices */}
+      {!isLowEnd && (
+        <>
+          <div className="fixed inset-0 mesh-gradient-intense opacity-40 pointer-events-none" />
+          <div className="fixed top-1/4 left-1/4 w-64 h-64 rounded-full bg-primary/20 blur-[120px] animate-pulse-glow pointer-events-none" />
+          <div className="fixed bottom-1/4 right-1/4 w-48 h-48 rounded-full bg-secondary/20 blur-[100px] animate-pulse-glow pointer-events-none" style={{ animationDelay: '1s' }} />
+        </>
+      )}
 
       {/* Header - CANLI KREDİ GÖSTERGESİ */}
       <header className="sticky top-0 z-40 glass-card border-b border-border/20">
@@ -395,27 +348,12 @@ export default function GeneratePage() {
           </div>
 
           {/* CANLI KREDİ */}
-          <Link to="/credits">
-            <div className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-2xl glass-card border transition-all hover:bg-muted/20",
-              hasEnoughCredits ? "border-secondary/30" : "border-destructive/30"
-            )}>
-              <Coins className={cn(
-                "w-4 h-4",
-                hasEnoughCredits ? "text-secondary" : "text-destructive"
-              )} />
-              <span className={cn(
-                "font-bold",
-                hasEnoughCredits ? "text-secondary" : "text-destructive"
-              )}>
-                {credits === null ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  credits
-                )}
-              </span>
-            </div>
-          </Link>
+          <div className="flex items-center gap-2">
+            {!isPro && (
+              <WatchAdButton onCreditEarned={refreshCredits} />
+            )}
+            <CreditBadge credits={credits || 0} isPro={isPro} />
+          </div>
         </div>
       </header>
 
@@ -512,13 +450,6 @@ export default function GeneratePage() {
               />
               <Label htmlFor="remove-bg" className="cursor-pointer text-xs font-medium flex items-center gap-1">
                 Arka Planı Sil
-                {isPro ? (
-                  <Crown className="w-3 h-3 text-yellow-500" />
-                ) : bgRemovalUnlocked ? (
-                  <Check className="w-3 h-3 text-green-500" />
-                ) : (
-                  <Lock className="w-3 h-3 text-muted-foreground" />
-                )}
               </Label>
             </div>
           </div>
@@ -614,7 +545,7 @@ export default function GeneratePage() {
                 <span className="text-lg">{isPro ? "👑" : "🔒"}</span>
                 <div className="flex flex-col items-start leading-none">
                   <span className="font-bold text-sm">Professional {isPro ? "" : "(PRO)"}</span>
-                  <span className="text-[10px] opacity-70">En İyi Kalite (DALL-E 3) • 5 Kredi</span>
+                  <span className="text-[10px] opacity-70">En İyi Kalite (DALL-E 3) • 10 Kredi</span>
                 </div>
               </div>
               {!isPro && (
@@ -691,106 +622,6 @@ export default function GeneratePage() {
         }
       `}</style>
 
-      {/* BACKGROUND REMOVAL PAYMENT MODAL */}
-      <AlertDialog open={showBgModal} onOpenChange={setShowBgModal}>
-        <AlertDialogContent className="glass-card gradient-dark border-white/10 max-w-sm">
-          <AlertDialogHeader>
-            <div className="mx-auto w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mb-4">
-              <Wand2 className="w-8 h-8 text-primary" />
-            </div>
-            <AlertDialogTitle className="text-center text-xl font-bold text-white">
-              Arka Plan Silme
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-center text-white/70">
-              Sticker'ının arka planını otomatik olarak sil ve şeffaf PNG al!
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          <div className="space-y-3 mt-4">
-            {/* PRO Option */}
-            <button
-              onClick={() => {
-                setShowBgModal(false);
-                navigate('/profile');
-              }}
-              className="w-full p-4 rounded-2xl border border-yellow-500/30 bg-yellow-500/10 hover:bg-yellow-500/20 transition-colors cursor-pointer text-left"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-yellow-500/20 flex items-center justify-center">
-                    <Crown className="w-5 h-5 text-yellow-500" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-white">PRO Üyelik</p>
-                    <p className="text-xs text-white/60">Sınırsız arka plan silme</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-yellow-500 font-bold">ÖNERİLEN</span>
-                  <ExternalLink className="w-4 h-4 text-yellow-500" />
-                </div>
-              </div>
-            </button>
-
-            {/* Credit Option */}
-            <button
-              onClick={handlePayCredit}
-              disabled={credits < 1}
-              className={cn(
-                "w-full p-4 rounded-2xl border transition-colors text-left",
-                credits >= 1
-                  ? "border-secondary/30 bg-secondary/10 hover:bg-secondary/20 cursor-pointer"
-                  : "border-muted/30 bg-muted/10 opacity-50 cursor-not-allowed"
-              )}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-secondary/20 flex items-center justify-center">
-                    <Coins className="w-5 h-5 text-secondary" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-white">1 Kredi Kullan</p>
-                    <p className="text-xs text-white/60">Mevcut: {credits} kredi</p>
-                  </div>
-                </div>
-                <span className="text-lg font-bold text-secondary">1</span>
-              </div>
-            </button>
-
-            {/* Ad Option */}
-            <button
-              onClick={handleWatchAd}
-              disabled={isWatchingAd}
-              className="w-full p-4 rounded-2xl border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 transition-colors cursor-pointer text-left"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
-                    {isWatchingAd ? (
-                      <Loader2 className="w-5 h-5 text-green-500 animate-spin" />
-                    ) : (
-                      <Play className="w-5 h-5 text-green-500" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-bold text-white">
-                      {isWatchingAd ? "Reklam yükleniyor..." : "Reklam İzle"}
-                    </p>
-                    <p className="text-xs text-white/60">Bu oturum için ücretsiz</p>
-                  </div>
-                </div>
-                <span className="text-xs text-green-500 font-bold">ÜCRETSİZ</span>
-              </div>
-            </button>
-          </div>
-
-          <AlertDialogFooter className="mt-4">
-            <AlertDialogCancel className="w-full rounded-xl border-white/10 text-white/60 hover:bg-white/10">
-              Vazgeç
-            </AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* PACK READY MODAL */}
       <AlertDialog open={!!createdPack} onOpenChange={() => setCreatedPack(null)}>
@@ -874,10 +705,11 @@ export default function GeneratePage() {
         }}
         onCreditsEarned={() => {
           refreshCredits();
-          // Auto-retry generation if provider was set
-          if (pendingProvider) {
+          // Auto-retry generation using ref to avoid stale closure
+          const provider = pendingProviderRef.current;
+          if (provider) {
             setShowNoCreditModal(false);
-            setTimeout(() => handleGenerate(pendingProvider), 500);
+            setTimeout(() => handleGenerate(provider), 500);
             setPendingProvider(null);
           }
         }}

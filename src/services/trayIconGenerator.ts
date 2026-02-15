@@ -49,17 +49,27 @@ export async function createTrayIconFromSticker(
       // 4. Sticker'ı çiz
       ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
 
-      // 5. PNG olarak export (maksimum kalite)
+      // 5. PNG olarak export
+      // WhatsApp Tray Icon Limiti: < 50 KB
+      // PNG sıkıştırma kontrolü tarayıcıda sınırlı olduğu için canvas boyutunu küçük tutuyoruz (96x96 zaten küçük)
+      // Ancak yine de blob size kontrolü iyi olur.
       canvas.toBlob(
         (blob) => {
           if (blob) {
+            // 50KB kontrolü
+            if (blob.size > 50 * 1024) {
+              console.warn('Tray icon > 50KB. WhatsApp reddedebilir.', blob.size);
+              // Eğer çok büyükse, kalite parametresi PNG için genelde çalışmaz ama
+              // canvas'ı küçültmeyi deneyebiliriz veya başka bir format (fakat WA PNG istiyor).
+              // 96x96 PNG'nin 50KB'ı geçmesi çok zor (ancak çok gürültülü görsel ise olabilir).
+            }
             resolve(blob);
           } else {
             reject(new Error('PNG dönüşümü başarısız'));
           }
         },
-        'image/png',
-        1.0  // Maksimum kalite
+        'image/png'
+        // PNG için kalite parametresi standartta yok
       );
     };
 

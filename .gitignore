@@ -29,3 +29,14 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# Android Release Signing (NEVER COMMIT THESE!)
+*.keystore
+*.jks
+android/keystore.properties
+google-services.json
+android/nul
+nul
+android/*.txt
+status_*.txt
+ios/debug.xcconfig

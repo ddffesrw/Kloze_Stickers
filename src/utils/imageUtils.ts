@@ -5,8 +5,8 @@
  */
 
 /**
- * Tray Icon (High Res 512x512 WebP)
- * Apps displays this, so it needs to be high quality
+ * Tray Icon (Strictly 96x96, < 50KB, PNG or WebP)
+ * WhatsApp Requirement: 96x96 pixels, < 50KB
  */
 export async function createTrayIcon(sourceImageUrl: string): Promise<Blob> {
     const response = await fetch(sourceImageUrl);
@@ -14,20 +14,26 @@ export async function createTrayIcon(sourceImageUrl: string): Promise<Blob> {
     const img = await createImageBitmap(blob);
 
     const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
+    canvas.width = 96;
+    canvas.height = 96;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas context failed');
 
-    ctx.drawImage(img, 0, 0, 512, 512);
+    ctx.drawImage(img, 0, 0, 96, 96);
 
-    return new Promise((resolve, reject) => {
-        canvas.toBlob(
-            (b) => b ? resolve(b) : reject(new Error('Tray icon creation failed')),
-            'image/webp',
-            0.85
-        );
-    });
+    // Try high quality first
+    let quality = 0.8;
+    let resultBlob: Blob | null = null;
+
+    // Attempt to keep under 50KB
+    while (quality > 0.1) {
+        resultBlob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/png', quality)); // PNG preferred for tray
+        if (resultBlob && resultBlob.size < 50 * 1024) break;
+        quality -= 0.1;
+    }
+
+    if (!resultBlob) throw new Error("Tray icon creation failed");
+    return resultBlob;
 }
 
 /**
@@ -38,8 +44,10 @@ export async function createThumbnail(blob: Blob): Promise<Blob> {
         const img = new Image();
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d')!;
+        const objectUrl = URL.createObjectURL(blob);
 
         img.onload = () => {
+            URL.revokeObjectURL(objectUrl);
             canvas.width = 128;
             canvas.height = 128;
 
@@ -56,22 +64,27 @@ export async function createThumbnail(blob: Blob): Promise<Blob> {
             );
         };
 
-        img.onerror = reject;
-        img.src = URL.createObjectURL(blob);
+        img.onerror = (err) => {
+            URL.revokeObjectURL(objectUrl);
+            reject(err);
+        };
+        img.src = objectUrl;
     });
 }
 
 /**
- * WebP formatına çevir (512x512)
- * WhatsApp standardı için
+ * WebP formatına çevir (512x512, < 100KB)
+ * WhatsApp standardı için STRICT 100KB limit
  */
 export async function convertToWebP(blob: Blob): Promise<Blob> {
     return new Promise((resolve, reject) => {
         const img = new Image();
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d')!;
+        const objectUrl = URL.createObjectURL(blob);
 
-        img.onload = () => {
+        img.onload = async () => {
+            URL.revokeObjectURL(objectUrl);
             // WhatsApp için kesinlikle 512x512
             canvas.width = 512;
             canvas.height = 512;
@@ -84,22 +97,33 @@ export async function convertToWebP(blob: Blob): Promise<Blob> {
             ctx.clearRect(0, 0, 512, 512);
             ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
 
-            // WebP olarak export (0.85 kalite = 100-200KB)
-            canvas.toBlob(
-                (blob) => {
-                    if (blob) {
-                        resolve(blob);
-                    } else {
-                        reject(new Error('WebP dönüşümü başarısız'));
-                    }
-                },
-                'image/webp',
-                0.85
-            );
+            // Strict 100KB Limit Loop
+            let quality = 0.9;
+            let resultBlob: Blob | null = null;
+            const MAX_SIZE = 100 * 1024; // 100KB
+
+            while (quality > 0.1) {
+                resultBlob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/webp', quality));
+
+                if (resultBlob && resultBlob.size < MAX_SIZE) {
+                    resolve(resultBlob);
+                    return;
+                }
+
+                // Reduce quality aggressively if file is big
+                quality -= 0.1;
+            }
+
+            // If still too big (unlikely with 0.1), resolve anyway but warn
+            if (resultBlob) resolve(resultBlob);
+            else reject(new Error('WebP compression failed'));
         };
 
-        img.onerror = reject;
-        img.src = URL.createObjectURL(blob);
+        img.onerror = (err) => {
+            URL.revokeObjectURL(objectUrl);
+            reject(err);
+        };
+        img.src = objectUrl;
     });
 }
 

@@ -1,6 +1,7 @@
-import { useState, useRef, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Upload, Scissors, Wand2, Loader2, Crown, Coins, Play, Check, X } from "lucide-react";
+import { getPendingSharedImages, clearPendingSharedImages } from "@/hooks/useSharedImages";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -14,10 +15,36 @@ import { NoCreditModal } from "@/components/kloze/NoCreditModal";
 
 export default function GalleryUploadPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+    // Handle shared images from other apps (WhatsApp, etc.)
+    useEffect(() => {
+        // Check location state first (from navigation)
+        const stateImages = (location.state as any)?.sharedImages;
+        if (stateImages && stateImages.length > 0) {
+            // Use first shared image
+            const base64 = stateImages[0];
+            const dataUrl = base64.startsWith('data:') ? base64 : `data:image/png;base64,${base64}`;
+            setSelectedImage(dataUrl);
+            toast.success("Paylaşılan görsel yüklendi!");
+            clearPendingSharedImages();
+            return;
+        }
+
+        // Check pending shared images (global state)
+        const pendingImages = getPendingSharedImages();
+        if (pendingImages && pendingImages.length > 0) {
+            const base64 = pendingImages[0];
+            const dataUrl = base64.startsWith('data:') ? base64 : `data:image/png;base64,${base64}`;
+            setSelectedImage(dataUrl);
+            toast.success("Paylaşılan görsel yüklendi!");
+            clearPendingSharedImages();
+        }
+    }, [location.state]);
     const [croppedImage, setCroppedImage] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [removeBg, setRemoveBg] = useState(false);
@@ -26,7 +53,7 @@ export default function GalleryUploadPage() {
     const [showNoCreditModal, setShowNoCreditModal] = useState(false);
 
     // Check Pro status
-    useState(() => {
+    useEffect(() => {
         const checkPro = async () => {
             const user = await auth.getCurrentUser();
             if (user) {
@@ -35,7 +62,7 @@ export default function GalleryUploadPage() {
             }
         };
         checkPro();
-    });
+    }, []);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -97,6 +124,8 @@ export default function GalleryUploadPage() {
         setIsProcessing(true);
         const toastId = toast.loading("Sticker oluşturuluyor...");
 
+        let bgRemovedUrl: string | null = null;
+
         try {
             let finalImage = croppedImage;
 
@@ -116,7 +145,8 @@ export default function GalleryUploadPage() {
 
                 const result = await removeBackground(blob);
                 if (result) {
-                    finalImage = URL.createObjectURL(result);
+                    bgRemovedUrl = URL.createObjectURL(result);
+                    finalImage = bgRemovedUrl;
 
                     // Deduct credit for non-Pro users
                     if (!isPro) {
@@ -154,6 +184,7 @@ export default function GalleryUploadPage() {
             console.error("Sticker creation error:", error);
             toast.error(error.message || "İşlem başarısız", { id: toastId });
         } finally {
+            if (bgRemovedUrl) URL.revokeObjectURL(bgRemovedUrl);
             setIsProcessing(false);
         }
     };
@@ -274,10 +305,15 @@ export default function GalleryUploadPage() {
                                             {isPro ? (
                                                 <span className="text-green-500 flex items-center gap-1"><Crown className="w-3 h-3" /> Pro ücretsiz</span>
                                             ) : (
-                                                <span className="text-yellow-500 flex items-center gap-1">
-                                                    <Coins className="w-3 h-3" />
-                                                    1 Kredi gerekli ({isCreditsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : credits} mevcut)
-                                                </span>
+                                                <div className="flex flex-col">
+                                                    <span className="text-yellow-500 flex items-center gap-1">
+                                                        <Coins className="w-3 h-3" />
+                                                        1 Kredi gerekli ({isCreditsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : credits} mevcut)
+                                                    </span>
+                                                    <span className="text-green-500 font-bold ml-4 text-[10px] mt-0.5">
+                                                        (Pro plana ücretsiz!)
+                                                    </span>
+                                                </div>
                                             )}
                                         </p>
                                     </div>

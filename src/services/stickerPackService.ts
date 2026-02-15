@@ -26,10 +26,14 @@ export interface StickerPack extends DbStickerPack {
 function mapPackWithStickers(pack: any): StickerPack {
   // Supabase can return the joined relation as 'stickers' or 'user_stickers' depending on query
   // Prioritize whatever array is available
+  // The query uses `user_stickers(*)`, so it will likely be in `user_stickers`
   const stickers = pack.stickers || pack.user_stickers || [];
 
+  // Should we transform user_stickers to stickers type if needed?
+  // They are likely the same type structure (DbSticker)
+
   // Fallback: use first sticker's image as cover if tray_image_url is missing
-  const coverUrl = pack.tray_image_url || stickers[0]?.image_url || null;
+  const coverUrl = pack.tray_image_url || ((stickers.length > 0) ? stickers[0].image_url : null) || null;
 
   return {
     ...pack,
@@ -41,25 +45,19 @@ function mapPackWithStickers(pack: any): StickerPack {
 /**
  * Get All Sticker Packs
  */
-export async function getAllStickerPacks(): Promise<StickerPack[]> {
+export async function getAllStickerPacks(limit: number = 50): Promise<StickerPack[]> {
   const { data, error } = await supabase
     .from('sticker_packs')
     .select(`
       *,
       user_stickers (*)
     `)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(limit);
 
   if (error) {
     console.error("Supabase Error:", error);
     throw error;
-  }
-
-  if (data && data.length > 0) {
-    console.log("Supabase Pack Data [0]:", data[0]);
-    if (!data[0].stickers) console.warn("WARNING: 'stickers' relation is missing in response!");
-  } else {
-    console.log("Supabase returned no packs.");
   }
 
   return (data || []).map(mapPackWithStickers);
@@ -103,40 +101,84 @@ export async function getUserPacks(userId: string): Promise<StickerPack[]> {
 }
 
 /**
- * Get Trending Packs
+ * Get Trending Packs (with pagination)
+ * Featured packs come first (sorted by display_downloads or downloads),
+ * then non-featured packs sorted by downloads
+ * offset=0 means first page (includes featured), offset>0 means only regular packs
  */
-export async function getTrendingStickerPacks(limit: number = 10): Promise<StickerPack[]> {
+export async function getTrendingStickerPacks(limit: number = 10, offset: number = 0): Promise<StickerPack[]> {
+  // First page: featured packs come first
+  if (offset === 0) {
+    let featured: StickerPack[] = [];
+    try {
+      const { data: featuredData, error: featuredError } = await supabase
+        .from('sticker_packs')
+        .select(`*, user_stickers (*)`)
+        .eq('is_featured', true)
+        .order('downloads', { ascending: false })
+        .limit(limit);
+
+      if (!featuredError && featuredData) {
+        featured = featuredData.map(p => {
+          const pack = mapPackWithStickers(p);
+          return { ...pack, stickers: pack.stickers ? pack.stickers.slice(0, 3) : [] };
+        });
+      }
+    } catch (e) {
+      console.warn('[getTrending] Featured query failed, falling back to regular:', e);
+    }
+
+    const remaining = limit - featured.length;
+    if (remaining <= 0) return featured.slice(0, limit);
+
+    const featuredIds = featured.map(p => p.id);
+    let query = supabase
+      .from('sticker_packs')
+      .select(`*, user_stickers (*)`)
+      .order('downloads', { ascending: false })
+      .limit(remaining);
+
+    if (featuredIds.length > 0) {
+      for (const id of featuredIds) {
+        query = query.neq('id', id);
+      }
+    }
+
+    const { data: regularData, error } = await query;
+    if (error) throw error;
+
+    const regular = (regularData || []).map(p => {
+      const pack = mapPackWithStickers(p);
+      return { ...pack, stickers: pack.stickers ? pack.stickers.slice(0, 3) : [] };
+    });
+
+    return [...featured, ...regular];
+  }
+
+  // Subsequent pages: only regular packs (skip featured, use offset)
   const { data, error } = await supabase
     .from('sticker_packs')
-    .select(`
-      *,
-      user_stickers (
-        *
-      )
-    `)
+    .select(`*, user_stickers (*)`)
     .order('downloads', { ascending: false })
-    .limit(limit);
+    .range(offset, offset + limit - 1);
 
   if (error) throw error;
 
   return (data || []).map(p => {
     const pack = mapPackWithStickers(p);
-    return {
-      ...pack,
-      stickers: pack.stickers ? pack.stickers.slice(0, 3) : []
-    };
+    return { ...pack, stickers: pack.stickers ? pack.stickers.slice(0, 3) : [] };
   });
 }
 
 /**
- * Get New Packs
+ * Get New Packs (with pagination)
  */
-export async function getNewStickerPacks(limit: number = 20): Promise<StickerPack[]> {
+export async function getNewStickerPacks(limit: number = 20, offset: number = 0): Promise<StickerPack[]> {
   const { data, error } = await supabase
     .from('sticker_packs')
     .select('*, user_stickers(*)')
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .range(offset, offset + limit - 1);
 
   if (error) throw error;
 
@@ -152,7 +194,7 @@ export async function getNewStickerPacks(limit: number = 20): Promise<StickerPac
 /**
  * Search Packs
  */
-export async function searchStickerPacks(query: string): Promise<StickerPack[]> {
+export async function searchStickerPacks(query: string, limit: number = 30): Promise<StickerPack[]> {
   const { data, error } = await supabase
     .from('sticker_packs')
     .select(`
@@ -160,7 +202,8 @@ export async function searchStickerPacks(query: string): Promise<StickerPack[]> 
       user_stickers (*)
     `)
     .or(`name.ilike.%${query}%,publisher.ilike.%${query}%,category.ilike.%${query}%`)
-    .order('downloads', { ascending: false });
+    .order('downloads', { ascending: false })
+    .limit(limit);
 
   if (error) throw error;
   return (data || []).map(mapPackWithStickers);
@@ -424,6 +467,101 @@ export async function updatePackDetails(packId: string, title?: string, category
 }
 
 /**
+ * Admin: Update pack download count
+ */
+export async function adminUpdatePackDownloads(packId: string, downloads: number): Promise<boolean> {
+  const { error } = await supabase
+    .from('sticker_packs')
+    .update({ downloads: Math.max(0, downloads) })
+    .eq('id', packId);
+
+  if (error) {
+    console.error('Update downloads error:', error);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Admin: Increment/Decrement pack downloads
+ */
+export async function adminAdjustPackDownloads(packId: string, adjustment: number): Promise<{ success: boolean; newCount: number }> {
+  // First get current count
+  const { data: pack, error: fetchError } = await supabase
+    .from('sticker_packs')
+    .select('downloads')
+    .eq('id', packId)
+    .single();
+
+  if (fetchError || !pack) {
+    return { success: false, newCount: 0 };
+  }
+
+  const currentDownloads = pack.downloads || 0;
+  const newDownloads = Math.max(0, currentDownloads + adjustment);
+
+  const { error } = await supabase
+    .from('sticker_packs')
+    .update({ downloads: newDownloads })
+    .eq('id', packId);
+
+  if (error) {
+    return { success: false, newCount: currentDownloads };
+  }
+
+  return { success: true, newCount: newDownloads };
+}
+
+/**
+ * Admin: Toggle featured status
+ */
+export async function adminToggleFeatured(packId: string, featured: boolean): Promise<boolean> {
+  const { error } = await supabase
+    .from('sticker_packs')
+    .update({ is_featured: featured })
+    .eq('id', packId);
+
+  if (error) {
+    console.error('Toggle featured error:', error);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Admin: Update display_downloads (shown to users instead of real count)
+ * Pass null to use real download count
+ */
+export async function adminUpdateDisplayDownloads(packId: string, displayDownloads: number | null): Promise<boolean> {
+  const { error } = await supabase
+    .from('sticker_packs')
+    .update({ display_downloads: displayDownloads })
+    .eq('id', packId);
+
+  if (error) {
+    console.error('Update display downloads error:', error);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Admin: Update pack likes count
+ */
+export async function adminUpdatePackLikes(packId: string, likesCount: number): Promise<boolean> {
+  const { error } = await supabase
+    .from('sticker_packs')
+    .update({ likes_count: Math.max(0, likesCount) })
+    .eq('id', packId);
+
+  if (error) {
+    console.error('Update likes error:', error);
+    return false;
+  }
+  return true;
+}
+
+/**
  * Delete Sticker Pack
  */
 export async function deleteStickerPack(packId: string): Promise<void> {
@@ -568,7 +706,7 @@ export async function updatePackCover(packId: string, stickerId: string): Promis
  */
 export function convertToWhatsAppFormat(pack: StickerPack): StickerPackInfo {
   return {
-    identifier: `kloze_${pack.id}`,
+    identifier: `kloze_${pack.id.replace(/-/g, '')}`,
     name: pack.name,
     publisher: pack.publisher,
     trayImageUrl: pack.tray_image_url,
@@ -684,4 +822,44 @@ export async function getNextPackName(category: string): Promise<string> {
   // Ensure we handle spaces in category names if any (e.g. "Funny Cats" -> "Funny_Cats_Pack_1")
   const sanitizedCategory = category.replace(/\s+/g, '_');
   return `${sanitizedCategory}_Pack_${nextIndex}`;
+}
+
+/**
+ * Get global platform stats (stickers, downloads, likes)
+ */
+export interface PlatformStats {
+  totalStickers: number;
+  totalDownloads: number;
+  totalLikes: number;
+}
+
+export async function getPlatformStats(): Promise<PlatformStats> {
+  try {
+    // Get aggregate pack stats (use display_downloads if admin set it, otherwise real downloads)
+    const { data: packStats } = await supabase
+      .from('sticker_packs')
+      .select('downloads, display_downloads, likes_count');
+
+    // Get total sticker count from stickers table
+    const { count: stickerCount } = await supabase
+      .from('stickers')
+      .select('*', { count: 'exact', head: true });
+
+    const totalStickers = stickerCount || 0;
+    const totalDownloads = packStats?.reduce((sum, p) => sum + (p.display_downloads ?? p.downloads ?? 0), 0) || 0;
+    const totalLikes = packStats?.reduce((sum, p) => sum + (p.likes_count || 0), 0) || 0;
+
+    return {
+      totalStickers,
+      totalDownloads,
+      totalLikes
+    };
+  } catch (e) {
+    console.error("Failed to fetch platform stats:", e);
+    return {
+      totalStickers: 0,
+      totalDownloads: 0,
+      totalLikes: 0
+    };
+  }
 }

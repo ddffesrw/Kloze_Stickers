@@ -22,6 +22,8 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true"
         android:usesCleartextTraffic="true">
 
         <activity
@@ -63,15 +65,15 @@
 
         <!-- Sticker Content Provider - WhatsApp erişimi için -->
         <!-- Sticker Content Provider - WhatsApp erişimi için
-             readPermission kaldırıldı: WhatsApp bu permission'ın sahibi,
-             biz redeclare edemeyiz (INSTALL_FAILED_DUPLICATE_PERMISSION).
-             exported=true + grantUriPermissions=true yeterli. -->
+             readPermission: WhatsApp tarafından tanımlanan permission'a referans verir.
+             Bu bir "declare" değil, sadece "use" — INSTALL_FAILED_DUPLICATE_PERMISSION riski yok. -->
         <provider
             android:name=".StickerContentProvider"
             android:authorities="com.klozestickers.app.stickercontentprovider"
             android:enabled="true"
             android:exported="true"
-            android:grantUriPermissions="true" />
+            android:grantUriPermissions="true"
+            android:readPermission="com.whatsapp.sticker.READ" />
 
         <!-- AdMob App ID (Test ID) -->
         <meta-data

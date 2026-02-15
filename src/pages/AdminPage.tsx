@@ -6,16 +6,15 @@ import {
   Plus, Minus, Crown, Sparkles, Activity, MoreVertical, Eye, Trash2,
   Settings, BarChart3, Bell, CheckCircle, Shield, Zap, Coins, Loader2,
   Image as ImageIcon, ShieldAlert, CreditCard, Layers, Edit, X, Check,
-  RefreshCw, Flag, Brush
+  RefreshCw, Flag, Brush, Timer, Percent, Tag, Lock, Star
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { allPacks } from "@/data/mockData";
+import { allPacks, categories as import_mock_categories } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { auth, supabase } from "@/lib/supabase";
 import { toast } from "sonner";
-import { Lock } from "lucide-react";
 import {
   adminGetAllUsers,
   adminAddCredits,
@@ -31,10 +30,28 @@ import {
   updatePackDetails,
   getStickerPackById,
   removeStickerFromPack,
-  getNextPackName
+  getNextPackName,
+  adminUpdatePackDownloads,
+  adminUpdatePackLikes,
+  adminToggleFeatured,
+  adminUpdateDisplayDownloads
 } from "@/services/stickerPackService";
 import { getAllCategories, createCategory, deleteCategory, Category } from "../services/categoryService";
-
+import {
+  adminGetAllPricingPlans,
+  adminCreatePricingPlan,
+  adminUpdatePricingPlan,
+  adminDeletePricingPlan,
+  adminTogglePlanStatus,
+  PricingPlan,
+  formatPrice
+} from "@/services/pricingService";
+import {
+  getAppSettings,
+  updateSettings,
+  AppSettings,
+  DEFAULT_SETTINGS
+} from "@/services/appSettingsService";
 
 import { getAllReports, updateReportStatus, type Report } from "@/services/reportService";
 import { User } from "@supabase/supabase-js";
@@ -76,6 +93,10 @@ export default function AdminPage() {
   const [editPackTitle, setEditPackTitle] = useState("");
   const [editPackCategory, setEditPackCategory] = useState("");
   const [editPackStickers, setEditPackStickers] = useState<any[]>([]);
+  const [editPackDownloads, setEditPackDownloads] = useState<number>(0);
+  const [editPackLikes, setEditPackLikes] = useState<number>(0);
+  const [editPackDisplayDownloads, setEditPackDisplayDownloads] = useState<string>("");
+  const [editPackRealDownloads, setEditPackRealDownloads] = useState<number>(0);
   const [loadingEdit, setLoadingEdit] = useState(false);
 
   // Upload State
@@ -120,6 +141,34 @@ export default function AdminPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [newCatName, setNewCatName] = useState("");
   const [newCatEmoji, setNewCatEmoji] = useState("");
+
+  // Pricing State
+  const [pricingPlans, setPricingPlans] = useState<PricingPlan[]>([]);
+  const [loadingPricing, setLoadingPricing] = useState(false);
+  const [pricingDialogOpen, setPricingDialogOpen] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<PricingPlan | null>(null);
+  const [planForm, setPlanForm] = useState({
+    type: 'credits' as 'credits' | 'subscription',
+    name: '',
+    description: '',
+    credits_amount: 0,
+    price: 0,
+    original_price: null as number | null,
+    currency: 'TRY',
+    duration_days: 30,
+    badge: '',
+    emoji: '💎',
+    color: 'violet',
+    sort_order: 0,
+    is_campaign: false,
+    campaign_name: '',
+    campaign_end_date: ''
+  });
+
+  // App Settings State
+  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [loadingSettings, setLoadingSettings] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   // 2. EFFECTS
   useEffect(() => {
@@ -274,12 +323,14 @@ export default function AdminPage() {
     const loadData = async () => {
       if (!user || user.email !== ADMIN_EMAIL) return;
       try {
-        const [stats, usersList, packsList, reportsList, categoriesResult] = await Promise.all([
+        const [stats, usersList, packsList, reportsList, categoriesResult, pricingResult, settingsResult] = await Promise.all([
           getAdminStats(),
           adminGetAllUsers(),
           getAllPacks(),
           getAllReports(),
-          getAllCategories()
+          getAllCategories(),
+          adminGetAllPricingPlans(),
+          getAppSettings()
         ]);
 
         if (stats) setAdminStatsData(stats);
@@ -287,6 +338,8 @@ export default function AdminPage() {
         if (packsList) setPacks(packsList);
         if (reportsList) setReports(reportsList);
         if (categoriesResult) setCategories(categoriesResult);
+        if (pricingResult) setPricingPlans(pricingResult);
+        if (settingsResult) setAppSettings(settingsResult);
 
         // Init Auto-Name if categories loaded and categories exist (Targeting Upload Tab now)
         if (categoriesResult && categoriesResult.length > 0 && !packTitle) {
@@ -364,8 +417,21 @@ export default function AdminPage() {
     if (!editPackId || !editPackTitle) return;
     try {
       await updatePackDetails(editPackId, editPackTitle, editPackCategory);
+      await adminUpdatePackDownloads(editPackId, editPackDownloads);
+      await adminUpdatePackLikes(editPackId, editPackLikes);
+      // Save display downloads (empty string = null = use real count)
+      const displayDl = editPackDisplayDownloads.trim() === "" ? null : Math.max(0, parseInt(editPackDisplayDownloads) || 0);
+      await adminUpdateDisplayDownloads(editPackId, displayDl);
       toast.success("Paket güncellendi");
-      setPacks(packs.map(p => p.id === editPackId ? { ...p, title: editPackTitle, name: editPackTitle, category: editPackCategory } : p));
+      setPacks(packs.map(p => p.id === editPackId ? {
+        ...p,
+        title: editPackTitle,
+        name: editPackTitle,
+        category: editPackCategory,
+        downloads: editPackDownloads,
+        likes_count: editPackLikes,
+        display_downloads: displayDl
+      } : p));
       setEditDialogOpen(false);
     } catch (e) {
       toast.error("Güncelleme başarısız");
@@ -395,16 +461,29 @@ export default function AdminPage() {
 
   const openEditDialog = async (pack: any) => {
     setEditPackId(pack.id);
-    setEditPackTitle(pack.name || pack.title);
+    setEditPackTitle(pack.name || pack.title || "");
     setEditPackCategory(pack.category || "Genel");
+    setEditPackDownloads(pack.downloads ?? 0);
+    setEditPackLikes(pack.likes_count ?? 0);
+    setEditPackDisplayDownloads(pack.display_downloads != null ? String(pack.display_downloads) : "");
+    setEditPackRealDownloads(pack.downloads ?? 0);
     setEditPackStickers([]); // Clear previous
     setEditDialogOpen(true);
     setLoadingEdit(true);
 
     try {
       const fullPack = await getStickerPackById(pack.id);
-      if (fullPack && fullPack.stickers) {
-        setEditPackStickers(fullPack.stickers);
+      if (fullPack) {
+        // Update all fields from full pack data (authoritative source)
+        setEditPackTitle(fullPack.name || (fullPack as any).title || pack.name || pack.title || "");
+        setEditPackCategory(fullPack.category || pack.category || "Genel");
+        setEditPackDownloads(fullPack.downloads ?? pack.downloads ?? 0);
+        setEditPackLikes(fullPack.likes_count ?? pack.likes_count ?? 0);
+        setEditPackDisplayDownloads((fullPack as any).display_downloads != null ? String((fullPack as any).display_downloads) : "");
+        setEditPackRealDownloads(fullPack.downloads ?? 0);
+        if (fullPack.stickers) {
+          setEditPackStickers(fullPack.stickers);
+        }
       }
     } catch (e) {
       toast.error("Paket içeriği yüklenemedi");
@@ -420,6 +499,18 @@ export default function AdminPage() {
       if (error) throw error;
       toast.success(newStatus ? "Paket Pro Olarak İşaretlendi" : "Paket Herkese Açıldı");
       setPacks(packs.map(p => p.id === packId ? { ...p, is_premium: newStatus } : p));
+    } catch (e) {
+      toast.error("Durum güncellenemedi");
+    }
+  };
+
+  const handleToggleFeatured = async (packId: string, currentStatus: boolean) => {
+    const newStatus = !currentStatus;
+    try {
+      const success = await adminToggleFeatured(packId, newStatus);
+      if (!success) throw new Error();
+      toast.success(newStatus ? "Paket Öne Çıkarıldı" : "Paket Öne Çıkarılmadan Kaldırıldı");
+      setPacks(packs.map(p => p.id === packId ? { ...p, is_featured: newStatus } : p));
     } catch (e) {
       toast.error("Durum güncellenemedi");
     }
@@ -509,12 +600,19 @@ export default function AdminPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 h-auto p-1 bg-muted/20 mb-6 rounded-2xl gap-1">
+          <TabsList className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-9 h-auto p-1 bg-muted/20 mb-6 rounded-2xl gap-1">
             <TabsTrigger value="overview">Genel</TabsTrigger>
             <TabsTrigger value="users">Üyeler</TabsTrigger>
             <TabsTrigger value="packs">Paketler</TabsTrigger>
             <TabsTrigger value="upload">Yükle</TabsTrigger>
-
+            <TabsTrigger value="pricing" className="gap-1">
+              <Tag className="w-3 h-3" />
+              Fiyatlar
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="gap-1">
+              <Coins className="w-3 h-3" />
+              Ayarlar
+            </TabsTrigger>
             <TabsTrigger value="comfy">ComfyUI</TabsTrigger>
             <TabsTrigger value="reports" className="relative">
               Raporlar
@@ -736,16 +834,34 @@ export default function AdminPage() {
                         {pack.is_premium && (
                           <Crown className="w-3 h-3 text-amber-400" />
                         )}
+                        {pack.is_featured && (
+                          <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                        )}
                       </div>
                       <p className="text-[10px] text-muted-foreground">{pack.publisher || "Admin"}</p>
                       <div className="flex items-center gap-2 mt-0.5">
                         <div className="flex items-center">
                           <span className="text-[9px] text-secondary">{pack.downloads || 0} ↓</span>
+                          {pack.display_downloads != null && (
+                            <span className="text-[9px] text-amber-400 ml-1">(goster: {pack.display_downloads})</span>
+                          )}
                         </div>
                         <span className="text-[9px] text-muted-foreground">{(pack.stickers || []).length} sticker</span>
                       </div>
                     </div>
                     <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                          "w-7 h-7",
+                          pack.is_featured ? "text-yellow-400" : "text-muted-foreground"
+                        )}
+                        onClick={() => handleToggleFeatured(pack.id, pack.is_featured)}
+                        title={pack.is_featured ? "Öne Çıkarmayı Kaldır" : "Öne Çıkar"}
+                      >
+                        <Star className={cn("w-3.5 h-3.5", pack.is_featured && "fill-yellow-400")} />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -816,12 +932,13 @@ export default function AdminPage() {
                     onChange={e => setCategory(e.target.value)}
                     className="w-full h-10 px-3 rounded-lg bg-muted/30 border border-border/30 text-sm"
                   >
-                    {categories.length > 0 ? (
-                      categories.map(c => (
-                        <option key={c.id} value={c.name}>{c.emoji} {c.name}</option>
-                      ))
-                    ) : (
-                      <option value="Genel">📂 Genel</option>
+                    {/* Use imported mockData categories to ensure full list availability */}
+                    {(categories.length > 0 ? categories : import_mock_categories).map(c => (
+                      <option key={c.id || c.name} value={c.name}>{c.emoji} {c.name}</option>
+                    ))}
+                    {/* Ensure 'Animated' is present if not in list */}
+                    {!categories.find(c => c.name === 'Animated') && !import_mock_categories.find(c => c.name === 'Animated') && (
+                      <option value="Animated">🎬 Animated</option>
                     )}
                   </select>
                 </div>
@@ -1086,6 +1203,554 @@ export default function AdminPage() {
             </div>
           </TabsContent>
 
+          <TabsContent value="pricing" className="space-y-6">
+            <div className="glass-card p-6 rounded-xl border border-border/20">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="font-bold flex items-center gap-2">
+                  <Tag className="w-5 h-5 text-primary" />
+                  Fiyatlandırma & Kampanyalar
+                </h3>
+                <Button
+                  onClick={() => {
+                    setEditingPlan(null);
+                    setPlanForm({
+                      type: 'credits',
+                      name: '',
+                      description: '',
+                      credits_amount: 50,
+                      price: 29.99,
+                      original_price: null,
+                      currency: 'TRY',
+                      duration_days: 30,
+                      badge: '',
+                      emoji: '💎',
+                      color: 'violet',
+                      sort_order: pricingPlans.length,
+                      is_campaign: false,
+                      campaign_name: '',
+                      campaign_end_date: ''
+                    });
+                    setPricingDialogOpen(true);
+                  }}
+                  className="gradient-primary"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Yeni Plan
+                </Button>
+              </div>
+
+              {/* Credit Packages */}
+              <div className="mb-8">
+                <h4 className="text-sm font-bold text-muted-foreground mb-3 flex items-center gap-2">
+                  <Coins className="w-4 h-4" />
+                  Kredi Paketleri
+                </h4>
+                <div className="space-y-2">
+                  {pricingPlans.filter(p => p.type === 'credits').map(plan => (
+                    <div
+                      key={plan.id}
+                      className={cn(
+                        "flex items-center gap-4 p-4 rounded-xl border transition-all",
+                        plan.is_active ? "border-border/30 bg-muted/10" : "border-red-500/30 bg-red-500/5 opacity-60"
+                      )}
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-xl">
+                        {plan.emoji}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold">{plan.name}</span>
+                          {plan.badge && (
+                            <span className="px-2 py-0.5 text-[10px] rounded-full bg-primary/20 text-primary font-bold">
+                              {plan.badge}
+                            </span>
+                          )}
+                          {plan.is_campaign && (
+                            <span className="px-2 py-0.5 text-[10px] rounded-full bg-red-500/20 text-red-400 font-bold animate-pulse flex items-center gap-1">
+                              <Timer className="w-3 h-3" />
+                              {plan.campaign_name || 'Kampanya'}
+                            </span>
+                          )}
+                          {!plan.is_active && (
+                            <span className="px-2 py-0.5 text-[10px] rounded-full bg-red-500/20 text-red-400 font-bold">
+                              Pasif
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                          <span>{plan.credits_amount} kredi</span>
+                          <span>•</span>
+                          <span className="font-bold text-secondary">{formatPrice(plan.price, plan.currency)}</span>
+                          {plan.original_price && (
+                            <span className="line-through text-xs">{formatPrice(plan.original_price, plan.currency)}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-8 h-8"
+                          onClick={() => {
+                            setEditingPlan(plan);
+                            setPlanForm({
+                              type: plan.type,
+                              name: plan.name,
+                              description: plan.description || '',
+                              credits_amount: plan.credits_amount,
+                              price: plan.price,
+                              original_price: plan.original_price,
+                              currency: plan.currency,
+                              duration_days: plan.duration_days,
+                              badge: plan.badge || '',
+                              emoji: plan.emoji,
+                              color: plan.color,
+                              sort_order: plan.sort_order,
+                              is_campaign: plan.is_campaign,
+                              campaign_name: plan.campaign_name || '',
+                              campaign_end_date: plan.campaign_end_date || ''
+                            });
+                            setPricingDialogOpen(true);
+                          }}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={cn("w-8 h-8", plan.is_active ? "text-green-500" : "text-muted-foreground")}
+                          onClick={async () => {
+                            await adminTogglePlanStatus(plan.id, !plan.is_active);
+                            setPricingPlans(pricingPlans.map(p => p.id === plan.id ? { ...p, is_active: !p.is_active } : p));
+                            toast.success(plan.is_active ? "Plan pasife alındı" : "Plan aktif edildi");
+                          }}
+                        >
+                          {plan.is_active ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-8 h-8 text-destructive"
+                          onClick={async () => {
+                            if (!confirm("Bu planı silmek istediğine emin misin?")) return;
+                            await adminDeletePricingPlan(plan.id);
+                            setPricingPlans(pricingPlans.filter(p => p.id !== plan.id));
+                            toast.success("Plan silindi");
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {pricingPlans.filter(p => p.type === 'credits').length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">Kredi paketi bulunmuyor</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Subscription Plans */}
+              <div>
+                <h4 className="text-sm font-bold text-muted-foreground mb-3 flex items-center gap-2">
+                  <Crown className="w-4 h-4 text-amber-400" />
+                  Üyelik Planları
+                </h4>
+                <div className="space-y-2">
+                  {pricingPlans.filter(p => p.type === 'subscription').map(plan => (
+                    <div
+                      key={plan.id}
+                      className={cn(
+                        "flex items-center gap-4 p-4 rounded-xl border transition-all",
+                        plan.is_active ? "border-amber-500/30 bg-amber-500/5" : "border-red-500/30 bg-red-500/5 opacity-60"
+                      )}
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-xl">
+                        {plan.emoji}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold">{plan.name}</span>
+                          {plan.badge && (
+                            <span className="px-2 py-0.5 text-[10px] rounded-full bg-amber-500/20 text-amber-400 font-bold">
+                              {plan.badge}
+                            </span>
+                          )}
+                          {!plan.is_active && (
+                            <span className="px-2 py-0.5 text-[10px] rounded-full bg-red-500/20 text-red-400 font-bold">
+                              Pasif
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                          <span>{plan.credits_amount} kredi</span>
+                          <span>•</span>
+                          <span>{plan.duration_days} gün</span>
+                          <span>•</span>
+                          <span className="font-bold text-amber-400">{formatPrice(plan.price, plan.currency)}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-8 h-8"
+                          onClick={() => {
+                            setEditingPlan(plan);
+                            setPlanForm({
+                              type: plan.type,
+                              name: plan.name,
+                              description: plan.description || '',
+                              credits_amount: plan.credits_amount,
+                              price: plan.price,
+                              original_price: plan.original_price,
+                              currency: plan.currency,
+                              duration_days: plan.duration_days,
+                              badge: plan.badge || '',
+                              emoji: plan.emoji,
+                              color: plan.color,
+                              sort_order: plan.sort_order,
+                              is_campaign: plan.is_campaign,
+                              campaign_name: plan.campaign_name || '',
+                              campaign_end_date: plan.campaign_end_date || ''
+                            });
+                            setPricingDialogOpen(true);
+                          }}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={cn("w-8 h-8", plan.is_active ? "text-green-500" : "text-muted-foreground")}
+                          onClick={async () => {
+                            await adminTogglePlanStatus(plan.id, !plan.is_active);
+                            setPricingPlans(pricingPlans.map(p => p.id === plan.id ? { ...p, is_active: !p.is_active } : p));
+                            toast.success(plan.is_active ? "Plan pasife alındı" : "Plan aktif edildi");
+                          }}
+                        >
+                          {plan.is_active ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-8 h-8 text-destructive"
+                          onClick={async () => {
+                            if (!confirm("Bu planı silmek istediğine emin misin?")) return;
+                            await adminDeletePricingPlan(plan.id);
+                            setPricingPlans(pricingPlans.filter(p => p.id !== plan.id));
+                            toast.success("Plan silindi");
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {pricingPlans.filter(p => p.type === 'subscription').length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">Üyelik planı bulunmuyor</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="settings" className="space-y-6">
+            <div className="glass-card p-6 rounded-xl border border-border/20">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="font-bold flex items-center gap-2">
+                  <Coins className="w-5 h-5 text-primary" />
+                  Kredi & Reklam Ayarları
+                </h3>
+                <Button
+                  onClick={async () => {
+                    setSavingSettings(true);
+                    try {
+                      const success = await updateSettings(appSettings);
+                      if (success) {
+                        toast.success("Ayarlar kaydedildi");
+                      } else {
+                        toast.error("Kaydetme başarısız");
+                      }
+                    } catch (e) {
+                      toast.error("Hata oluştu");
+                    } finally {
+                      setSavingSettings(false);
+                    }
+                  }}
+                  disabled={savingSettings}
+                  className="gradient-primary"
+                >
+                  {savingSettings ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
+                  Kaydet
+                </Button>
+              </div>
+
+              {/* Kredi Ayarları */}
+              <div className="mb-8">
+                <h4 className="text-sm font-bold text-muted-foreground mb-4 flex items-center gap-2">
+                  <Coins className="w-4 h-4 text-yellow-500" />
+                  Kredi Sistemi
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Sticker Başına Maliyet */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-violet-500/10 to-purple-500/10 border border-violet-500/20">
+                    <label className="text-xs font-bold text-violet-400 mb-2 block">
+                      🎨 Sticker Başına Kredi Maliyeti
+                    </label>
+                    <p className="text-[10px] text-muted-foreground mb-2">
+                      Kullanıcı sticker oluştururken harcayacağı kredi (0.5 = 2 sticker/1 kredi)
+                    </p>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      value={appSettings.credit_cost_per_sticker}
+                      onChange={e => setAppSettings({ ...appSettings, credit_cost_per_sticker: parseFloat(e.target.value) || 1 })}
+                      className="bg-black/20 border-violet-500/30 text-lg font-bold"
+                    />
+                    <div className="flex gap-1 mt-2">
+                      {[0.5, 1, 2, 5].map(val => (
+                        <Button
+                          key={val}
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className={cn(
+                            "text-[10px] h-6 px-2",
+                            appSettings.credit_cost_per_sticker === val ? "bg-violet-500/20 text-violet-400" : "text-muted-foreground"
+                          )}
+                          onClick={() => setAppSettings({ ...appSettings, credit_cost_per_sticker: val })}
+                        >
+                          {val}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Reklam Başına Ödül */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20">
+                    <label className="text-xs font-bold text-green-400 mb-2 block">
+                      🎬 Reklam İzleme Ödülü (Kredi)
+                    </label>
+                    <p className="text-[10px] text-muted-foreground mb-2">
+                      Kullanıcı 1 reklam izlediğinde kazanacağı kredi
+                    </p>
+                    <Input
+                      type="number"
+                      step="0.5"
+                      min="0.5"
+                      value={appSettings.credit_reward_per_ad}
+                      onChange={e => setAppSettings({ ...appSettings, credit_reward_per_ad: parseFloat(e.target.value) || 1 })}
+                      className="bg-black/20 border-green-500/30 text-lg font-bold"
+                    />
+                    <div className="flex gap-1 mt-2">
+                      {[1, 2, 3, 5].map(val => (
+                        <Button
+                          key={val}
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className={cn(
+                            "text-[10px] h-6 px-2",
+                            appSettings.credit_reward_per_ad === val ? "bg-green-500/20 text-green-400" : "text-muted-foreground"
+                          )}
+                          onClick={() => setAppSettings({ ...appSettings, credit_reward_per_ad: val })}
+                        >
+                          {val}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Günlük Ücretsiz Kredi */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20">
+                    <label className="text-xs font-bold text-blue-400 mb-2 block">
+                      📅 Günlük Ücretsiz Kredi
+                    </label>
+                    <p className="text-[10px] text-muted-foreground mb-2">
+                      Her gün sıfırlanan ücretsiz kredi miktarı
+                    </p>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={appSettings.free_daily_credits}
+                      onChange={e => setAppSettings({ ...appSettings, free_daily_credits: parseInt(e.target.value) || 3 })}
+                      className="bg-black/20 border-blue-500/30 text-lg font-bold"
+                    />
+                    <div className="flex gap-1 mt-2">
+                      {[0, 3, 5, 10].map(val => (
+                        <Button
+                          key={val}
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className={cn(
+                            "text-[10px] h-6 px-2",
+                            appSettings.free_daily_credits === val ? "bg-blue-500/20 text-blue-400" : "text-muted-foreground"
+                          )}
+                          onClick={() => setAppSettings({ ...appSettings, free_daily_credits: val })}
+                        >
+                          {val}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Yeni Kullanıcı Bonusu */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20">
+                    <label className="text-xs font-bold text-amber-400 mb-2 block">
+                      🎁 Yeni Kullanıcı Bonus Kredisi
+                    </label>
+                    <p className="text-[10px] text-muted-foreground mb-2">
+                      Kayıt olan kullanıcıya verilen hoşgeldin bonusu
+                    </p>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={appSettings.new_user_bonus_credits}
+                      onChange={e => setAppSettings({ ...appSettings, new_user_bonus_credits: parseInt(e.target.value) || 10 })}
+                      className="bg-black/20 border-amber-500/30 text-lg font-bold"
+                    />
+                    <div className="flex gap-1 mt-2">
+                      {[5, 10, 20, 50].map(val => (
+                        <Button
+                          key={val}
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className={cn(
+                            "text-[10px] h-6 px-2",
+                            appSettings.new_user_bonus_credits === val ? "bg-amber-500/20 text-amber-400" : "text-muted-foreground"
+                          )}
+                          onClick={() => setAppSettings({ ...appSettings, new_user_bonus_credits: val })}
+                        >
+                          {val}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Reklam Ayarları */}
+              <div className="mb-8">
+                <h4 className="text-sm font-bold text-muted-foreground mb-4 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-red-500" />
+                  Reklam Limitleri
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Reklamlar Aktif */}
+                  <div className="p-4 rounded-xl bg-muted/20 border border-border/30">
+                    <label className="text-xs font-bold mb-2 flex items-center gap-2">
+                      Reklamlar Aktif
+                    </label>
+                    <div className="flex items-center gap-2 mt-2">
+                      <input
+                        type="checkbox"
+                        checked={appSettings.ads_enabled}
+                        onChange={e => setAppSettings({ ...appSettings, ads_enabled: e.target.checked })}
+                        className="w-5 h-5 accent-green-500"
+                      />
+                      <span className={cn("text-sm font-bold", appSettings.ads_enabled ? "text-green-400" : "text-red-400")}>
+                        {appSettings.ads_enabled ? "Açık" : "Kapalı"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Reklam Bekleme Süresi */}
+                  <div className="p-4 rounded-xl bg-muted/20 border border-border/30">
+                    <label className="text-xs font-bold mb-2 block">
+                      Bekleme Süresi (dakika)
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={appSettings.ad_cooldown_minutes}
+                      onChange={e => setAppSettings({ ...appSettings, ad_cooldown_minutes: parseInt(e.target.value) || 5 })}
+                      className="bg-black/20"
+                    />
+                  </div>
+
+                  {/* Günlük Max Reklam */}
+                  <div className="p-4 rounded-xl bg-muted/20 border border-border/30">
+                    <label className="text-xs font-bold mb-2 block">
+                      Günlük Max Reklam
+                    </label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={appSettings.max_ads_per_day}
+                      onChange={e => setAppSettings({ ...appSettings, max_ads_per_day: parseInt(e.target.value) || 10 })}
+                      className="bg-black/20"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Özellik Yönetimi */}
+              <div className="mb-8">
+                <h4 className="text-sm font-bold text-muted-foreground mb-4 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  Özellik Yönetimi
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-muted/20 border border-border/30">
+                    <label className="text-xs font-bold mb-2 flex items-center gap-2">
+                      Sticker Üretici (AI Maker)
+                    </label>
+                    <p className="text-[10px] text-muted-foreground mb-3">
+                      Kapalıyken kullanıcılara "Çok Yakında" ekranı gösterilir.
+                    </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <input
+                        type="checkbox"
+                        checked={appSettings.is_maker_enabled}
+                        onChange={e => setAppSettings({ ...appSettings, is_maker_enabled: e.target.checked })}
+                        className="w-5 h-5 accent-green-500"
+                      />
+                      <span className={cn("text-sm font-bold", appSettings.is_maker_enabled ? "text-green-400" : "text-amber-400")}>
+                        {appSettings.is_maker_enabled ? "Aktif" : "Bakımda / Çok Yakında"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Hesaplama Örneği */}
+              <div className="p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
+                <h4 className="text-sm font-bold mb-2 flex items-center gap-2">
+                  🧮 Mevcut Ayarlarla Hesaplama
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-black text-primary">
+                      {(appSettings.credit_reward_per_ad / appSettings.credit_cost_per_sticker).toFixed(1)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">sticker/reklam</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-secondary">
+                      {(appSettings.free_daily_credits / appSettings.credit_cost_per_sticker).toFixed(1)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">ücretsiz sticker/gün</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-green-400">
+                      {((appSettings.max_ads_per_day * appSettings.credit_reward_per_ad) / appSettings.credit_cost_per_sticker).toFixed(0)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">max sticker/gün (reklamla)</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-amber-400">
+                      {(appSettings.new_user_bonus_credits / appSettings.credit_cost_per_sticker).toFixed(0)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">bonus sticker (yeni üye)</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
           <TabsContent value="categories" className="space-y-6">
             <div className="glass-card p-6 rounded-xl border border-border/20">
               <h3 className="font-bold mb-4 flex items-center gap-2">
@@ -1195,39 +1860,178 @@ export default function AdminPage() {
           <DialogHeader>
             <DialogTitle>Paketi Düzenle</DialogTitle>
           </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Paket Başlığı</label>
-              <Input
-                value={editPackTitle}
-                onChange={e => setEditPackTitle(e.target.value)}
-              />
+          {loadingEdit ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
+          ) : (
+            <div className="py-4 space-y-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Paket Başlığı</label>
+                <Input
+                  value={editPackTitle}
+                  onChange={e => setEditPackTitle(e.target.value)}
+                />
+              </div>
 
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Kategori</label>
-              <select
-                value={editPackCategory}
-                onChange={e => setEditPackCategory(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg bg-muted/30 border border-border/30 text-sm"
-              >
-                {categories.length > 0 ? (
-                  categories.map(c => (
-                    <option key={c.id} value={c.name}>{c.emoji} {c.name}</option>
-                  ))
-                ) : (
-                  <option value="Genel">📂 Genel</option>
-                )}
-              </select>
-            </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Kategori</label>
+                <select
+                  value={editPackCategory}
+                  onChange={e => setEditPackCategory(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg bg-muted/30 border border-border/30 text-sm"
+                >
+                  {/* Use imported mockData categories to ensure full list availability */}
+                  {/* Fallback to DB categories if needed, or merge them. For now, mockData is the source of truth for UI options */}
+                  {(categories.length > 0 ? categories : import_mock_categories).map(c => (
+                    <option key={c.id || c.name} value={c.name}>{c.emoji} {c.name}</option>
+                  ))}
+                  {/* Ensure 'Animated' is present if not in list */}
+                  {!categories.find(c => c.name === 'Animated') && !import_mock_categories.find(c => c.name === 'Animated') && (
+                    <option value="Animated">🎬 Animated</option>
+                  )}
+                </select>
+              </div>
 
-            <div>
-              <label className="text-xs text-muted-foreground mb-2 block font-bold">Stickerlar ({editPackStickers.length})</label>
-              {loadingEdit ? (
-                <div className="flex justify-center p-4">
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              {/* Download & Likes Manipulation */}
+              <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-blue-500/10 border border-emerald-500/20">
+                <div>
+                  <label className="text-xs font-bold text-emerald-400 mb-2 block flex items-center gap-1">
+                    📥 İndirme Sayısı
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 border-emerald-500/30 hover:bg-emerald-500/20"
+                      onClick={() => setEditPackDownloads(Math.max(0, editPackDownloads - 10))}
+                    >
+                      <Minus className="w-4 h-4" />
+                    </Button>
+                    <Input
+                      type="number"
+                      value={editPackDownloads}
+                      onChange={e => setEditPackDownloads(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="text-center text-lg font-bold bg-black/20 border-emerald-500/30"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 border-emerald-500/30 hover:bg-emerald-500/20"
+                      onClick={() => setEditPackDownloads(editPackDownloads + 10)}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="flex gap-1 mt-2">
+                    {[100, 500, 1000].map(val => (
+                      <Button
+                        key={val}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-[10px] h-6 px-2 text-emerald-400 hover:bg-emerald-500/20"
+                        onClick={() => setEditPackDownloads(editPackDownloads + val)}
+                      >
+                        +{val}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
-              ) : (
+
+                <div>
+                  <label className="text-xs font-bold text-pink-400 mb-2 block flex items-center gap-1">
+                    ❤️ Beğeni Sayısı
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 border-pink-500/30 hover:bg-pink-500/20"
+                      onClick={() => setEditPackLikes(Math.max(0, editPackLikes - 10))}
+                    >
+                      <Minus className="w-4 h-4" />
+                    </Button>
+                    <Input
+                      type="number"
+                      value={editPackLikes}
+                      onChange={e => setEditPackLikes(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="text-center text-lg font-bold bg-black/20 border-pink-500/30"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 border-pink-500/30 hover:bg-pink-500/20"
+                      onClick={() => setEditPackLikes(editPackLikes + 10)}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="flex gap-1 mt-2">
+                    {[50, 100, 500].map(val => (
+                      <Button
+                        key={val}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-[10px] h-6 px-2 text-pink-400 hover:bg-pink-500/20"
+                        onClick={() => setEditPackLikes(editPackLikes + val)}
+                      >
+                        +{val}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Görünen İndirme Sayısı (Override) */}
+              <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20">
+                <label className="text-xs font-bold text-amber-400 mb-1 block">
+                  👁️ Kullanıcıya Gösterilen İndirme Sayısı
+                </label>
+                <p className="text-[10px] text-muted-foreground mb-2">
+                  Boş bırakırsan gerçek indirme sayısı gösterilir. Gerçek: <span className="font-bold text-emerald-400">{editPackRealDownloads}</span>
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    placeholder="Boş = gerçek sayı"
+                    value={editPackDisplayDownloads}
+                    onChange={e => setEditPackDisplayDownloads(e.target.value)}
+                    className="text-center font-bold bg-black/20 border-amber-500/30"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-[10px] border-amber-500/30 hover:bg-amber-500/20 text-amber-400 whitespace-nowrap"
+                    onClick={() => setEditPackDisplayDownloads("")}
+                  >
+                    Sıfırla
+                  </Button>
+                </div>
+                <div className="flex gap-1 mt-2">
+                  {[500, 1000, 5000, 10000].map(val => (
+                    <Button
+                      key={val}
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-[10px] h-6 px-2 text-amber-400 hover:bg-amber-500/20"
+                      onClick={() => setEditPackDisplayDownloads(String(val))}
+                    >
+                      {val >= 1000 ? `${val / 1000}K` : val}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-2 block font-bold">Stickerlar ({editPackStickers.length})</label>
                 <div className="grid grid-cols-4 gap-2 max-h-[300px] overflow-y-auto p-2 bg-muted/20 rounded-lg">
                   {editPackStickers.map((s) => (
                     <div key={s.id} className="relative aspect-square group rounded-md overflow-hidden bg-black/20">
@@ -1251,11 +2055,11 @@ export default function AdminPage() {
                     </div>
                   )}
                 </div>
-              )}
+              </div>
             </div>
-          </div>
+          )}
           <DialogFooter>
-            <Button onClick={handleUpdatePack}>Kaydet</Button>
+            <Button onClick={handleUpdatePack} disabled={loadingEdit}>Kaydet</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1274,6 +2078,251 @@ export default function AdminPage() {
         onCropComplete={handleCropComplete}
         aspectRatio={1}
       />
+
+      {/* Pricing Plan Dialog */}
+      <Dialog open={pricingDialogOpen} onOpenChange={setPricingDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingPlan ? 'Planı Düzenle' : 'Yeni Plan Oluştur'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Type */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-2 block">Plan Tipi</label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={planForm.type === 'credits' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPlanForm({ ...planForm, type: 'credits' })}
+                  className="flex-1"
+                >
+                  <Coins className="w-4 h-4 mr-2" />
+                  Kredi Paketi
+                </Button>
+                <Button
+                  type="button"
+                  variant={planForm.type === 'subscription' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPlanForm({ ...planForm, type: 'subscription' })}
+                  className="flex-1"
+                >
+                  <Crown className="w-4 h-4 mr-2" />
+                  Üyelik
+                </Button>
+              </div>
+            </div>
+
+            {/* Name & Emoji */}
+            <div className="grid grid-cols-4 gap-3">
+              <div className="col-span-3">
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Plan Adı</label>
+                <Input
+                  value={planForm.name}
+                  onChange={e => setPlanForm({ ...planForm, name: e.target.value })}
+                  placeholder="Örn: Popüler Paket"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Emoji</label>
+                <Input
+                  value={planForm.emoji}
+                  onChange={e => setPlanForm({ ...planForm, emoji: e.target.value })}
+                  placeholder="💎"
+                  className="text-center text-xl"
+                />
+              </div>
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Açıklama</label>
+              <Input
+                value={planForm.description}
+                onChange={e => setPlanForm({ ...planForm, description: e.target.value })}
+                placeholder="Kısa açıklama"
+              />
+            </div>
+
+            {/* Credits & Duration */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Kredi Miktarı</label>
+                <Input
+                  type="number"
+                  value={planForm.credits_amount}
+                  onChange={e => setPlanForm({ ...planForm, credits_amount: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+              {planForm.type === 'subscription' && (
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Süre (Gün)</label>
+                  <Input
+                    type="number"
+                    value={planForm.duration_days}
+                    onChange={e => setPlanForm({ ...planForm, duration_days: parseInt(e.target.value) || 30 })}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Price */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Fiyat (₺)</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={planForm.price}
+                  onChange={e => setPlanForm({ ...planForm, price: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Orijinal Fiyat (İndirim için)</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={planForm.original_price || ''}
+                  onChange={e => setPlanForm({ ...planForm, original_price: e.target.value ? parseFloat(e.target.value) : null })}
+                  placeholder="Boş bırakılabilir"
+                />
+              </div>
+            </div>
+
+            {/* Badge & Color */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Rozet</label>
+                <select
+                  value={planForm.badge}
+                  onChange={e => setPlanForm({ ...planForm, badge: e.target.value })}
+                  className="w-full h-10 px-3 rounded-lg bg-muted/30 border border-border/30 text-sm"
+                >
+                  <option value="">Yok</option>
+                  <option value="popular">En Popüler</option>
+                  <option value="best_value">En Avantajlı</option>
+                  <option value="limited">Sınırlı</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Renk</label>
+                <select
+                  value={planForm.color}
+                  onChange={e => setPlanForm({ ...planForm, color: e.target.value })}
+                  className="w-full h-10 px-3 rounded-lg bg-muted/30 border border-border/30 text-sm"
+                >
+                  <option value="violet">Mor</option>
+                  <option value="cyan">Mavi</option>
+                  <option value="gold">Altın</option>
+                  <option value="pink">Pembe</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Sort Order */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Sıralama</label>
+              <Input
+                type="number"
+                value={planForm.sort_order}
+                onChange={e => setPlanForm({ ...planForm, sort_order: parseInt(e.target.value) || 0 })}
+              />
+            </div>
+
+            {/* Campaign Section */}
+            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 space-y-3">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="is_campaign"
+                  checked={planForm.is_campaign}
+                  onChange={e => setPlanForm({ ...planForm, is_campaign: e.target.checked })}
+                  className="w-4 h-4 accent-red-500"
+                />
+                <label htmlFor="is_campaign" className="font-bold text-red-400 flex items-center gap-2">
+                  <Percent className="w-4 h-4" />
+                  Kampanya Modu
+                </label>
+              </div>
+
+              {planForm.is_campaign && (
+                <>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Kampanya Adı</label>
+                    <Input
+                      value={planForm.campaign_name}
+                      onChange={e => setPlanForm({ ...planForm, campaign_name: e.target.value })}
+                      placeholder="Örn: Yılbaşı İndirimi"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Bitiş Tarihi (Opsiyonel)</label>
+                    <Input
+                      type="datetime-local"
+                      value={planForm.campaign_end_date}
+                      onChange={e => setPlanForm({ ...planForm, campaign_end_date: e.target.value })}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPricingDialogOpen(false)}>
+              İptal
+            </Button>
+            <Button
+              onClick={async () => {
+                try {
+                  const planData = {
+                    type: planForm.type,
+                    name: planForm.name,
+                    description: planForm.description || null,
+                    credits_amount: planForm.credits_amount,
+                    price: planForm.price,
+                    original_price: planForm.original_price,
+                    currency: planForm.currency,
+                    duration_days: planForm.duration_days,
+                    badge: planForm.badge || null,
+                    emoji: planForm.emoji,
+                    color: planForm.color,
+                    sort_order: planForm.sort_order,
+                    is_campaign: planForm.is_campaign,
+                    campaign_name: planForm.is_campaign ? planForm.campaign_name : null,
+                    campaign_end_date: planForm.is_campaign && planForm.campaign_end_date ? new Date(planForm.campaign_end_date).toISOString() : null
+                  };
+
+                  if (editingPlan) {
+                    const updated = await adminUpdatePricingPlan(editingPlan.id, planData);
+                    if (updated) {
+                      setPricingPlans(pricingPlans.map(p => p.id === editingPlan.id ? updated : p));
+                      toast.success("Plan güncellendi");
+                    }
+                  } else {
+                    const created = await adminCreatePricingPlan(planData);
+                    if (created) {
+                      setPricingPlans([...pricingPlans, created]);
+                      toast.success("Yeni plan oluşturuldu");
+                    }
+                  }
+
+                  setPricingDialogOpen(false);
+                } catch (e) {
+                  toast.error("İşlem başarısız");
+                  console.error(e);
+                }
+              }}
+              className="gradient-primary"
+            >
+              {editingPlan ? 'Güncelle' : 'Oluştur'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

@@ -43,7 +43,7 @@ export function NoCreditModal({
         try {
             // Prepare reward ad
             await AdMob.prepareRewardVideoAd({
-                adId: 'ca-app-pub-3940256099942544/5224354917' // Test ID
+                adId: import.meta.env.VITE_ADMOB_REWARD_ID || 'ca-app-pub-3940256099942544/5224354917'
             });
 
             // Listen for reward
@@ -53,7 +53,10 @@ export function NoCreditModal({
                     console.log('Reward received:', reward);
 
                     // Add credit via RPC
-                    await supabase.rpc('add_credits', { amount: 1 });
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (user) {
+                        await supabase.rpc('add_credits', { user_id: user.id, amount: 1 });
+                    }
 
                     toast.success("🎉 1 Kredi kazandın!");
                     onCreditsEarned?.();
@@ -61,11 +64,17 @@ export function NoCreditModal({
                 }
             );
 
+            // Cleanup listener when ad is dismissed (not arbitrary timeout)
+            const dismissListener = await AdMob.addListener(
+                RewardAdPluginEvents.Dismissed,
+                () => {
+                    rewardListener.remove();
+                    dismissListener.remove();
+                }
+            );
+
             // Show ad
             await AdMob.showRewardVideoAd();
-
-            // Cleanup listener after ad closes
-            setTimeout(() => rewardListener.remove(), 5000);
 
         } catch (error) {
             console.error('Ad error:', error);

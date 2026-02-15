@@ -3,7 +3,7 @@
  * Tam pipeline: Runware → Background Removal → WebP → Supabase
  */
 
-import { generateSticker, type GenerateStickerOptions } from './runwareService';
+import { generateSticker, removeBackground as runwareRemoveBg, type GenerateStickerOptions } from './runwareService';
 
 import { generateStickerDalle } from './openAiService';
 import { removeBackgroundWithRetry } from './backgroundRemovalService';
@@ -46,13 +46,16 @@ export async function generateAndUploadSticker(
       throw new Error("Kredi bilgisi alınamadı");
     }
 
-    // Cost Logic: HF=1, Runware=3, Dalle=5
+    // Cost Logic: HF=1, Runware=3, Dalle=10 (Pro only)
     let requiredCredits = 1; // Default HF
     if (provider === 'runware') requiredCredits = 3;
-    if (provider === 'dalle') requiredCredits = 5;
+    if (provider === 'dalle') requiredCredits = 10;
 
     if ((creditAmount || 0) < requiredCredits) throw new Error(`Yetersiz kredi! Bu işlem için ${requiredCredits} kredi gerekiyor.`);
 
+    // Kredi düşülmüyor henüz - tüm pipeline başarılı olduktan SONRA düşülecek
+
+    try {
     // 1. AI ile görsel üret
     onProgress?.({
       stage: 'generating',
@@ -89,27 +92,30 @@ export async function generateAndUploadSticker(
       });
 
       try {
-        // Option 1: Try HF if provider was HF (or always try it first?)
-        // Let's try local first as it's faster usually? Or HF as requested?
-        // User asked for HF research. Let's try it.
-        // Actually, stick to local @imgly as default for speed/privacy, 
-        // but since user specifically asked "research HF for BG", let's hook it up.
-        // Since we don't have a verified HF model returning image (RMBG returns masks often),
-        // let's keep using the FIXED local one as primary for now to ensure stability.
-
+        // Always use local @imgly BG removal (free, runs in browser via WASM)
+        // Runware's server-side BG removal costs extra API credits - unnecessary
+        console.log('[Generation] Using local @imgly BG removal...');
         transparentBlob = await removeBackgroundWithRetry(generated.imageURL);
 
-      } catch (bgError) {
-        console.error("Local BG removal failed, trying fallback...", bgError);
-        // Fallback logic could go here
-        throw bgError;
-      }
+        onProgress?.({
+          stage: 'removing_bg',
+          progress: 60,
+          message: 'Arka plan silindi!'
+        });
 
-      onProgress?.({
-        stage: 'removing_bg',
-        progress: 60,
-        message: 'Arka plan silindi!'
-      });
+      } catch (bgError) {
+        console.error("BG removal failed, falling back to original...", bgError);
+
+        // FALLBACK: Use original image so user doesn't lose credit/sticker
+        onProgress?.({
+          stage: 'removing_bg',
+          progress: 60,
+          message: 'Arka plan silinemedi, orijinali kullanılıyor...'
+        });
+
+        const response = await fetch(generated.imageURL);
+        transparentBlob = await response.blob();
+      }
     } else {
       // Skip removal, fetch original image as blob if needed
       onProgress?.({
@@ -178,9 +184,12 @@ export async function generateAndUploadSticker(
       size_bytes: webpBlob.size // Add file size
     });
 
-    // 7. Kredi Düş
+    // Pipeline tamamen başarılı - şimdi krediyi düş
     if (requiredCredits > 0) {
-      await supabase.rpc('deduct_credits', { amount: requiredCredits });
+      const { error: deductError } = await supabase.rpc('deduct_credits', { amount: requiredCredits });
+      if (deductError) {
+        console.error('[Generation] Credit deduction failed after success:', deductError);
+      }
     }
 
     return {
@@ -191,6 +200,11 @@ export async function generateAndUploadSticker(
       width: 512,
       height: 512
     };
+
+    } catch (pipelineError) {
+      // Pipeline failed - no credit was deducted, nothing to refund
+      throw pipelineError;
+    }
 
   } catch (error) {
     console.error('Sticker generation pipeline error:', error);
@@ -234,6 +248,6 @@ export async function generateMultipleStickers(
  * Provider'a göre maliyet hesabı (Temsili)
  */
 export function estimateCost(provider: 'runware' | 'huggingface' | 'dalle'): number {
-  if (provider === 'dalle') return 0.08; // ~$0.08 for HD
-  return provider === 'runware' ? 0.02 : 0.00; // $0.02 vs Free
+  if (provider === 'dalle') return 0.04; // ~$0.04 standard quality
+  return provider === 'runware' ? 0.0013 : 0.00; // BG removal is free (local @imgly)
 }

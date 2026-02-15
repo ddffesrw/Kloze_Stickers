@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { auth } from "@/lib/supabase";
+import { isAdminAvailable, isAndroid, isIOS } from "@/lib/platform";
 
 const navItems = [
   { path: "/", icon: Home, label: "Ana Sayfa" },
@@ -14,12 +15,17 @@ const navItems = [
 export function BottomNav() {
   const location = useLocation();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     auth.getCurrentUser().then(user => {
-      if (user && user.email === "johnaxe.storage@gmail.com") {
-        setIsAdmin(true);
+      if (user) {
+        setIsLoggedIn(true);
+        if (user.email === "johnaxe.storage@gmail.com") {
+          setIsAdmin(true);
+        }
       } else {
+        setIsLoggedIn(false);
         setIsAdmin(false);
       }
     });
@@ -29,19 +35,35 @@ export function BottomNav() {
     return null;
   }
 
+  // Android: bottom nav çubuğu sistem tuşlarıyla (home, back, recent) çakışıyor.
+  // Capacitor WebView Android'de safe-area-inset-bottom genellikle 0 döner.
+  // Gesture nav: ~20px, 3-button nav: ~48px alt boşluk gerekir.
+  // Extra padding ile çakışmayı önlüyoruz.
+  const getBottomStyle = (): string => {
+    if (isAndroid()) return '28px';    // Android: gesture + 3-button nav için güvenli
+    if (isIOS()) return 'calc(env(safe-area-inset-bottom, 8px) + 8px)';  // iOS: safe area kullan
+    return '16px'; // Web
+  };
+
   return (
-    <nav className="fixed bottom-4 left-4 right-4 z-50">
+    <nav
+      className="fixed left-4 right-4 z-50"
+      style={{ bottom: getBottomStyle() }}
+    >
       <div className="glass-card rounded-3xl border border-border/40 overflow-hidden">
         <div className="flex items-center justify-around h-16 max-w-md mx-auto px-2">
           {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            const Icon = item.icon;
             const isProfile = item.path === "/profile";
+            // Guest users: redirect profile to auth
+            const path = isProfile && !isLoggedIn ? "/auth" : item.path;
+            const label = isProfile && !isLoggedIn ? "Giriş Yap" : item.label;
+            const isActive = location.pathname === path;
+            const Icon = item.icon;
 
             return (
               <Link
                 key={item.path}
-                to={item.path}
+                to={path}
                 className={cn(
                   "relative flex flex-col items-center justify-center gap-0.5 px-5 py-2 rounded-2xl transition-all duration-300",
                   isActive
@@ -68,7 +90,7 @@ export function BottomNav() {
                   "relative z-10 text-[10px] font-medium",
                   isActive && "text-primary"
                 )}>
-                  {item.label}
+                  {label}
                 </span>
                 {isActive && (
                   <div className="absolute -bottom-1 w-1 h-1 rounded-full bg-primary glow-violet" />
@@ -77,8 +99,8 @@ export function BottomNav() {
             );
           })}
 
-          {/* Admin Button */}
-          {isAdmin && (
+          {/* Admin Button - Only visible on Web */}
+          {isAdmin && isAdminAvailable() && (
             <Link
               to="/admin"
               className={cn(

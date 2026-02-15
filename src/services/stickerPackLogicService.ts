@@ -157,7 +157,7 @@ export async function addPackToWhatsApp(
 
   // WhatsApp formatına çevir
   const packInfo: StickerPackInfo = {
-    identifier: `kloze_${packId}`,
+    identifier: `kloze_${packId.replace(/-/g, '')}`,
     name: pack.name,
     publisher: pack.publisher,
     trayImageUrl: pack.tray_image_url,

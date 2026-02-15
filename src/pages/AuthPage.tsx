@@ -1,24 +1,139 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
-import { Chrome, Apple, Check } from "lucide-react"; // Chrome as Google placeholder if needed, or simple text
+import { Chrome, Apple, Check, Wand2, Sparkles, Palette, Zap } from "lucide-react";
 import { toast } from "sonner";
+import { Capacitor } from "@capacitor/core";
+import { App as CapacitorApp } from "@capacitor/app";
+import ExternalBrowser from "@/plugins/external-browser";
 
 export default function AuthPage() {
     const [loading, setLoading] = useState(false);
     const [agreed, setAgreed] = useState(false);
+    const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Deep link handling is done in App.tsx - no duplicate listener here
+
+    // Reset loading state when component regains focus (user returns from browser)
+    // or when auth state changes. This prevents stuck loading buttons.
+    useEffect(() => {
+        // On native: listen for app resume (user closed browser or came back)
+        if (Capacitor.isNativePlatform()) {
+            const resumeHandler = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+                if (isActive) {
+                    // Deep link tetiklenmemiş olabilir (özellikle MIUI/Redmi cihazlarda)
+                    // Session'ı aktif olarak kontrol et - fallback mekanizması
+                    setTimeout(async () => {
+                        try {
+                            const { data: { session } } = await supabase.auth.getSession();
+                            if (session) {
+                                console.log('[AuthPage] Session found on resume');
+                            }
+                        } catch (e) {
+                            console.warn('[AuthPage] Session check failed:', e);
+                        }
+                        setLoading(false);
+                    }, 2000);
+                }
+            });
+
+            return () => {
+                resumeHandler.then(h => h.remove());
+            };
+        } else {
+            // On web: listen for auth state change to reset loading
+            const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, _session) => {
+                setLoading(false);
+            });
+
+            return () => {
+                subscription.unsubscribe();
+            };
+        }
+    }, []);
+
+    // Safety timeout: always reset loading after 30s to prevent permanent stuck state
+    useEffect(() => {
+        if (loading) {
+            loadingTimeoutRef.current = setTimeout(() => {
+                console.warn('[AuthPage] Loading timeout reached, resetting...');
+                setLoading(false);
+            }, 30000);
+        } else {
+            if (loadingTimeoutRef.current) {
+                clearTimeout(loadingTimeoutRef.current);
+                loadingTimeoutRef.current = null;
+            }
+        }
+
+        return () => {
+            if (loadingTimeoutRef.current) {
+                clearTimeout(loadingTimeoutRef.current);
+            }
+        };
+    }, [loading]);
 
     const handleSocialLogin = async (provider: 'google' | 'apple') => {
         try {
             setLoading(true);
-            const { error } = await supabase.auth.signInWithOAuth({
-                provider,
-                options: {
-                    redirectTo: window.location.origin, // Redirect back to home
-                },
-            });
-            if (error) throw error;
+
+            // Google: Browser-based flow (due to plugin installation issues)
+            // Enhanced with ExternalBrowser plugin for reliable redirects
+            if (provider === 'google') {
+                const redirectTo = Capacitor.isNativePlatform()
+                    ? 'com.klozestickers.app://login-callback'
+                    : window.location.origin;
+
+                const { data, error } = await supabase.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: {
+                        redirectTo,
+                        skipBrowserRedirect: Capacitor.isNativePlatform(),
+                        queryParams: {
+                            access_type: 'offline',
+                            prompt: 'consent',
+                        },
+                    },
+                });
+
+                if (error) throw error;
+
+                if (Capacitor.isNativePlatform() && data?.url) {
+                    await ExternalBrowser.open({ url: data.url });
+                }
+                return;
+            }
+
+            // Apple: Native Sign-In
+            if (provider === 'apple') {
+                if (Capacitor.isNativePlatform()) {
+                    const { SignInWithApple } = await import('@capacitor-community/apple-sign-in');
+                    const result = await SignInWithApple.authorize({
+                        clientId: 'com.klozestickers.app',
+                        scopes: 'email name',
+                        redirectURI: 'https://cxujdireegrurfyhhocz.supabase.co/auth/v1/callback',
+                    });
+
+                    if (result.response && result.response.identityToken) {
+                        const { error } = await supabase.auth.signInWithIdToken({
+                            provider: 'apple',
+                            token: result.response.identityToken,
+                            nonce: 'NONCE', // Supabase requires nonce for Apple? Usually optional or handled by SDK
+                        });
+                        if (error) throw error;
+                    } else {
+                        throw new Error('Apple Sign-In failed');
+                    }
+                } else {
+                    // Web fallback for Apple
+                    const { error } = await supabase.auth.signInWithOAuth({
+                        provider: 'apple',
+                        options: { redirectTo: window.location.origin }
+                    });
+                    if (error) throw error;
+                }
+            }
         } catch (error: any) {
             toast.error(error.message);
             setLoading(false);
@@ -30,13 +145,36 @@ export default function AuthPage() {
             {/* Dynamic Background */}
             <div className="fixed inset-0 mesh-gradient-intense opacity-60 pointer-events-none" />
 
-            {/* Animated Floating Stickers */}
+            {/* Premium Ambient Background */}
             <div className="fixed inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-10 left-10 text-6xl animate-float opacity-80" style={{ animationDuration: '8s' }}>🎨</div>
-                <div className="absolute bottom-20 right-10 text-6xl animate-float-delayed opacity-80" style={{ animationDuration: '10s' }}>🚀</div>
-                <div className="absolute top-1/3 right-20 text-5xl animate-float opacity-60" style={{ animationDuration: '12s' }}>✨</div>
-                <div className="absolute bottom-1/3 left-20 text-5xl animate-float-delayed opacity-60" style={{ animationDuration: '9s' }}>🔥</div>
-                <div className="absolute top-1/2 left-1/2 text-8xl opacity-10 blur-xl animate-pulse">KLOZE</div>
+                {/* 1. Dynamic Gradient Orbs - Optimized */}
+                <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-primary/10 rounded-full blur-[80px]" />
+                <div className="absolute bottom-[-10%] right-[-20%] w-[500px] h-[500px] bg-secondary/10 rounded-full blur-[60px]" />
+
+                {/* 2. Floating Glass Elements (Premium Icons) - Optimized Blur */}
+                <div className="absolute top-[15%] left-[8%] animate-float will-change-transform" style={{ animationDuration: '6s' }}>
+                    <div className="p-4 rounded-3xl bg-white/5 backdrop-blur-md border border-white/10 shadow-lg shadow-purple-500/5 rotate-[-12deg]">
+                        <Palette className="w-8 h-8 text-purple-300 drop-shadow-md" />
+                    </div>
+                </div>
+
+                <div className="absolute bottom-[20%] right-[10%] animate-float-delayed will-change-transform" style={{ animationDuration: '8s' }}>
+                    <div className="p-5 rounded-[2rem] bg-white/5 backdrop-blur-md border border-white/10 shadow-lg shadow-amber-500/5 rotate-[12deg]">
+                        <Wand2 className="w-10 h-10 text-amber-300 drop-shadow-md" />
+                    </div>
+                </div>
+
+                <div className="absolute top-[25%] right-[15%] animate-float will-change-transform" style={{ animationDuration: '10s' }}>
+                    <div className="p-3 rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 shadow-md shadow-blue-500/5 rotate-[6deg]">
+                        <Sparkles className="w-6 h-6 text-blue-300 drop-shadow-md" />
+                    </div>
+                </div>
+
+                <div className="absolute bottom-[15%] left-[15%] animate-float-delayed will-change-transform" style={{ animationDuration: '9s' }}>
+                    <div className="p-3 rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 shadow-md shadow-green-500/5 rotate-[-6deg]">
+                        <Zap className="w-5 h-5 text-green-300 drop-shadow-md" />
+                    </div>
+                </div>
             </div>
 
             {/* Glass Card */}

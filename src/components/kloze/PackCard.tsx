@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { Share } from "@capacitor/share";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, memo } from "react";
 import { ReportModal } from "./ReportModal";
 
 interface PackCardProps {
@@ -14,11 +14,11 @@ interface PackCardProps {
   onLike?: (id: string) => void;
 }
 
-export function PackCard({ pack, size = "md", isLiked, onLike }: PackCardProps) {
+export const PackCard = memo(function PackCard({ pack, size = "md", isLiked, onLike }: PackCardProps) {
   const [reportModalOpen, setReportModalOpen] = useState(false);
 
-  // Use pack.downloads or fallback only if null/undefined
-  const downloads = pack.downloads ?? 0;
+  // Use display_downloads if set by admin, otherwise real downloads
+  const downloads = pack.display_downloads ?? pack.downloads ?? 0;
 
   const formatDownloads = (num: number) => {
     if (num >= 1000) {
@@ -47,7 +47,7 @@ export function PackCard({ pack, size = "md", isLiked, onLike }: PackCardProps) 
       await Share.share({
         title: pack.title,
         text: `Kloze uygulamasında ${pack.title} sticker paketini keşfet!`,
-        url: `${window.location.origin}/pack/${pack.id}`,
+        url: `https://kloze.app/pack/${pack.id}`,
         dialogTitle: 'Paketi Paylaş',
       });
     } catch (error) {
@@ -56,10 +56,10 @@ export function PackCard({ pack, size = "md", isLiked, onLike }: PackCardProps) 
         navigator.share({
           title: pack.title,
           text: `Kloze uygulamasında ${pack.title} sticker paketini keşfet!`,
-          url: `${window.location.origin}/pack/${pack.id}`,
+          url: `https://kloze.app/pack/${pack.id}`,
         }).catch(console.error);
       } else {
-        navigator.clipboard.writeText(`${window.location.origin}/pack/${pack.id}`);
+        navigator.clipboard.writeText(`https://kloze.app/pack/${pack.id}`);
         toast.success("Link kopyalandı!");
       }
     }
@@ -98,6 +98,8 @@ export function PackCard({ pack, size = "md", isLiked, onLike }: PackCardProps) 
             <img
               src={pack.tray_image_url || pack.coverImage || pack.stickers?.[0]?.image_url || "/placeholder.png"}
               alt={pack.title || pack.name}
+              loading="lazy"
+              decoding="async"
               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
 
@@ -199,12 +201,14 @@ export function PackCard({ pack, size = "md", isLiked, onLike }: PackCardProps) 
       </div>
 
       {/* Report Modal */}
-      <ReportModal
-        isOpen={reportModalOpen}
-        onClose={() => setReportModalOpen(false)}
-        packId={pack.id}
-        packTitle={pack.title || pack.name}
-      />
+      {reportModalOpen && (
+        <ReportModal
+          isOpen={reportModalOpen}
+          onClose={() => setReportModalOpen(false)}
+          packId={pack.id}
+          packTitle={pack.title || pack.name}
+        />
+      )}
     </Link>
   );
-}
+});

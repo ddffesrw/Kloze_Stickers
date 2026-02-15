@@ -1,13 +1,14 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'app.lovable.d7685d6b5c3346488a767907e61fa87e',
+  appId: 'com.klozestickers.app',
   appName: 'Kloze Stickers',
   webDir: 'dist',
-  server: {
-    url: 'https://d7685d6b-5c33-4648-8a76-7907e61fa87e.lovableproject.com?forceHideBadge=true',
-    cleartext: true
-  },
+  // Live reload için - test bitince kaldır!
+  // server: {
+  //   url: 'http://192.168.1.129:5173',
+  //   cleartext: true
+  // },
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,
@@ -17,6 +18,15 @@ const config: CapacitorConfig = {
     WhatsAppStickers: {
       // WhatsApp Stickers Plugin Configuration
     }
+  },
+  android: {
+    allowMixedContent: true,
+    // WebView ayarları - localStorage persistence (MIUI/Redmi cihazlarda önemli)
+    webContentsDebuggingEnabled: true
+  },
+  // Server URL scheme - deep link'lerin düzgün çalışması için
+  server: {
+    androidScheme: 'https'
   }
 };
 

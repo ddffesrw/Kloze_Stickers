@@ -1,8 +1,10 @@
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { StickerPack, Sticker } from './stickerService';
+import { StickerPack } from './stickerPackService';
+import { Sticker } from './stickerService';
 import { Capacitor } from '@capacitor/core';
 import { WhatsAppStickers } from '@/plugins/whatsapp-stickers';
+import { convertToWebP, createTrayIcon } from '@/utils/imageUtils';
 
 interface WhatsAppStickerContent {
     image_file: string;
@@ -33,15 +35,16 @@ async function fetchImageBlob(url: string): Promise<Blob> {
 }
 
 /**
- * Helper: Convert Blob to Base64 (without prefix)
+ * Helper: Convert Blob to Base64 data URL (with prefix)
+ * Kotlin plugin expects data: prefix to decode correctly
  */
 async function blobToBase64(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
-            const base64 = reader.result as string;
-            // remove data:image/webp;base64, prefix
-            resolve(base64.split(',')[1]);
+            // Return full data URL (data:image/webp;base64,...)
+            // Kotlin plugin checks for "data:" prefix to decode
+            resolve(reader.result as string);
         };
         reader.onerror = reject;
         reader.readAsDataURL(blob);
@@ -68,15 +71,23 @@ export async function downloadWhatsAppPack(pack: StickerPack, stickers: Sticker[
                 throw new Error("WhatsApp cihazda yüklü değil.");
             }
 
-            // 2. Tray Icon
-            const trayBlob = await fetchImageBlob(pack.tray_image_url || stickers[0].image_url);
+            // 2. Tray Icon Process (96x96, <50KB)
+            const trayUrl = pack.tray_image_url || stickers[0].image_url;
+            const trayBlob = await createTrayIcon(trayUrl); // Strict processing
             const trayBase64 = await blobToBase64(trayBlob);
 
-            // 3. Stickers
+            // 3. Stickers Process (512x512, <100KB)
             const stickersData = [];
             for (const sticker of stickers) {
-                const blob = await fetchImageBlob(sticker.image_url);
-                const base64 = await blobToBase64(blob);
+                // Fetch Original
+                const rawBlob = await fetchImageBlob(sticker.image_url);
+
+                // Process on-the-fly (Resize & Compress)
+                const compliantBlob = await convertToWebP(rawBlob);
+
+                // Convert to Base64
+                const base64 = await blobToBase64(compliantBlob);
+
                 stickersData.push({
                     data: base64,
                     emojis: ["😀", "✨"]
@@ -86,7 +97,7 @@ export async function downloadWhatsAppPack(pack: StickerPack, stickers: Sticker[
             // 4. Call Native Plugin
             await WhatsAppStickers.addStickerPack({
                 identifier: pack.id,
-                name: pack.title,
+                name: pack.name,
                 publisher: pack.publisher || "Kloze User",
                 trayImage: trayBase64,
                 stickers: stickersData,
@@ -106,19 +117,22 @@ export async function downloadWhatsAppPack(pack: StickerPack, stickers: Sticker[
     // --- WEB FLOW (ZIP DOWNLOAD) ---
     const zip = new JSZip();
 
-    // 1. Tray Icon
-    const trayBlob = await fetchImageBlob(pack.tray_image_url || stickers[0].image_url);
+    // 1. Tray Icon Process (96x96, <50KB)
+    const trayUrl = pack.tray_image_url || stickers[0].image_url;
+    const trayBlob = await createTrayIcon(trayUrl);
     zip.file("tray.png", trayBlob);
 
-    // 2. Stickers
+    // 2. Stickers Process (512x512, <100KB)
     const stickerMetadata: WhatsAppStickerContent[] = [];
 
     for (let i = 0; i < stickers.length; i++) {
         const sticker = stickers[i];
         const fileName = `${i + 1}.webp`;
 
-        const blob = await fetchImageBlob(sticker.image_url);
-        zip.file(fileName, blob);
+        const rawBlob = await fetchImageBlob(sticker.image_url);
+        const compliantBlob = await convertToWebP(rawBlob);
+
+        zip.file(fileName, compliantBlob);
 
         stickerMetadata.push({
             image_file: fileName,
@@ -129,7 +143,7 @@ export async function downloadWhatsAppPack(pack: StickerPack, stickers: Sticker[
     // 3. Metadata JSON
     const metadata: WhatsAppPackMetadata = {
         identifier: pack.id,
-        name: pack.title,
+        name: pack.name,
         publisher: pack.publisher || "Kloze User",
         tray_image_file: "tray.png",
         image_data_version: "1",
@@ -145,7 +159,7 @@ export async function downloadWhatsAppPack(pack: StickerPack, stickers: Sticker[
 
     // 4. Generate & Download
     const content = await zip.generateAsync({ type: "blob" });
-    const safeTitle = pack.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const safeTitle = pack.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     saveAs(content, `${safeTitle}.wasticker`);
 }
 
@@ -162,6 +176,6 @@ export async function downloadAllStickers(pack: StickerPack, stickers: Sticker[]
     }
 
     const content = await zip.generateAsync({ type: "blob" });
-    const safeTitle = pack.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const safeTitle = pack.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     saveAs(content, `${safeTitle}_images.zip`);
 }

@@ -17,6 +17,10 @@ import java.io.FileNotFoundException
  */
 class StickerContentProvider : ContentProvider() {
 
+    private fun logd(msg: String) {
+        Log.d("WhatsAppStickers", msg)
+    }
+
     companion object {
         private const val TAG = "WhatsAppStickers" // Unified tag for easy filtering by user
         private const val AUTHORITY = "com.klozestickers.app.stickercontentprovider"
@@ -337,8 +341,9 @@ class StickerContentProvider : ContentProvider() {
         Log.d(TAG, "Found ${stickerFiles?.size ?: 0} sticker files")
 
         stickerFiles?.forEach { stickerFile ->
-            // Use mapped emojis or default if missing
-            val emojis = emojiMap[stickerFile.name] ?: "😀,😊"
+            // Use mapped emojis or default if missing, limit to max 3
+            val rawEmojis = emojiMap[stickerFile.name] ?: "😀,😊"
+            val emojis = rawEmojis.split(",").take(3).joinToString(",")
             Log.d(TAG, "Adding sticker: ${stickerFile.name}, emojis: $emojis")
             cursor.addRow(arrayOf(
                 stickerFile.name,

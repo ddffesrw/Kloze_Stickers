@@ -44,6 +44,8 @@ export function TrendingCarousel({ packs, likedPackIds, onLike }: TrendingCarous
                   <img
                     src={pack.tray_image_url || pack.coverImage}
                     alt={pack.title || pack.name}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                   />
 
@@ -91,7 +93,7 @@ export function TrendingCarousel({ packs, likedPackIds, onLike }: TrendingCarous
                       <p className="text-muted-foreground text-[10px] truncate">{pack.publisher || pack.creator}</p>
                       <div className="flex items-center gap-0.5 text-secondary">
                         <Download className="w-2.5 h-2.5" />
-                        <span className="text-[10px] font-semibold">{formatDownloads(pack.downloads || 0)}</span>
+                        <span className="text-[10px] font-semibold">{formatDownloads(pack.display_downloads ?? pack.downloads ?? 0)}</span>
                       </div>
                     </div>
                   </div>
