@@ -2,7 +2,7 @@
  * useStickerGeneration Hook - REAL MODE
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   generateAndUploadSticker,
@@ -10,6 +10,7 @@ import {
   type GeneratedStickerResult
 } from '@/services/stickerGenerationService';
 import { consumeRateLimit, RATE_LIMITS, formatResetTime } from '@/services/rateLimitService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface UseStickerGenerationReturn {
   generate: (prompt: string, provider?: 'runware' | 'huggingface' | 'dalle', removeBg?: boolean) => Promise<GeneratedStickerResult | null>;
@@ -27,29 +28,10 @@ export function useStickerGeneration(userId: string): UseStickerGenerationReturn
   const [progress, setProgress] = useState<GenerationProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [credits, setCredits] = useState<number | null>(null); // null = loading
-  const [hasEnoughCredits, setHasEnoughCredits] = useState(true); // Default true to prevent flash
+  // Tek kaynak: AuthContext
+  const { credits, refreshCredits, setCreditsLocal } = useAuth();
 
-  /**
-   * Credit'leri yenile
-   */
-  const refreshCredits = useCallback(async () => {
-    if (!userId) return;
-
-    // Use RPC to avoid 403/RLS issues
-    const { data: creditBalance, error } = await supabase.rpc('get_user_credits');
-
-    if (!error) {
-      const balance = creditBalance || 0;
-      setCredits(balance);
-      setHasEnoughCredits(balance > 0);
-    }
-  }, [userId]);
-
-  // Initial load
-  useEffect(() => {
-    refreshCredits();
-  }, [refreshCredits]);
+  const hasEnoughCredits = credits > 0;
 
   /**
    * Sticker üret
@@ -88,8 +70,12 @@ export function useStickerGeneration(userId: string): UseStickerGenerationReturn
         provider
       );
 
-      // Başarılı ise krediyi güncelle (Service düşürdü, biz güncel değeri çekelim)
-      await refreshCredits();
+      // Başarılı: Optimistic update with silent verification
+      setCreditsLocal(credits - requiredCredits);
+      // Silent background refresh to sync with actual balance
+      refreshCredits().catch(() => {
+        // Silently ignore refresh errors, user already has optimistic update
+      });
 
       return result;
 
@@ -103,7 +89,7 @@ export function useStickerGeneration(userId: string): UseStickerGenerationReturn
       setIsGenerating(false);
       setProgress(null);
     }
-  }, [userId, credits, refreshCredits]);
+  }, [userId, credits, refreshCredits, setCreditsLocal]);
 
   const resetError = useCallback(() => {
     setError(null);

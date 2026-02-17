@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { Sparkles, Wand2, Zap, Check, AlertCircle, Loader2, Crown, Construction } from "lucide-react";
 import { CreditBadge } from "@/components/kloze/CreditBadge";
@@ -8,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { aiStyles } from "@/data/mockData";
+import { aiStyles, translatePrompt } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { useStickerGeneration } from "@/hooks/useStickerGeneration";
 import { supabase } from "@/lib/supabase";
@@ -198,10 +199,13 @@ export default function GeneratePage() {
     setGenerationComplete(false);
 
     // PROMPT ENHANCER
+    // 1. Translate Turkish to English for Flux Schnell
+    const translatedPrompt = translatePrompt(prompt);
+    // 2. Get style keywords
     const selectedStyleObj = aiStyles.find(s => s.id === selectedStyle);
     const stylePrompt = selectedStyleObj ? `, ${selectedStyleObj.prompt}` : "";
-    const coreKeywords = ", sticker design, vector style, white background, die-cut white border, centered, isolated on white background, high quality, masterpiece";
-    const fullPrompt = `${prompt}${stylePrompt}${coreKeywords}`;
+    // 3. Schnell-optimized: subject first, then style, then sticker keywords (concise)
+    const fullPrompt = `${translatedPrompt}${stylePrompt}, sticker, die-cut, white border, white background, centered, isolated, vector illustration`;
 
     // MOTOR TETİKLE
     const result = await generate(fullPrompt, provider, removeBackground);
@@ -324,7 +328,7 @@ export default function GeneratePage() {
 
 
   return (
-    <div className="min-h-screen bg-background pb-28 relative">
+    <div className="min-h-screen bg-background pb-28 relative overflow-x-hidden">
       {/* Background - skip heavy effects on low-end devices */}
       {!isLowEnd && (
         <>

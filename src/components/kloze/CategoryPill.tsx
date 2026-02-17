@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { cn } from "@/lib/utils";
 
 interface CategoryPillProps {
@@ -27,12 +28,12 @@ const colorVariants = {
   },
 };
 
-export function CategoryPill({ 
-  emoji, 
-  name, 
-  isActive, 
+function CategoryPillComponent({
+  emoji,
+  name,
+  isActive,
   onClick,
-  color = "default" 
+  color = "default"
 }: CategoryPillProps) {
   const variant = colorVariants[color];
 
@@ -40,7 +41,7 @@ export function CategoryPill({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 px-4 py-2.5 rounded-2xl whitespace-nowrap transition-all duration-300",
+        "flex items-center gap-2 px-4 py-2.5 rounded-2xl whitespace-nowrap  duration-300",
         "border text-sm font-medium",
         "backdrop-blur-sm",
         isActive
@@ -58,3 +59,5 @@ export function CategoryPill({
     </button>
   );
 }
+
+export const CategoryPill = memo(CategoryPillComponent);

@@ -3,13 +3,13 @@
  * Tam pipeline: Runware → Background Removal → WebP → Supabase
  */
 
-import { generateSticker, removeBackground as runwareRemoveBg, type GenerateStickerOptions } from './runwareService';
+import { generateSticker, type GenerateStickerOptions } from './runwareService';
 
 import { generateStickerDalle } from './openAiService';
 import { removeBackgroundWithRetry } from './backgroundRemovalService';
 import { supabase } from '@/lib/supabase';
 import { storageService, BUCKETS } from './storageService';
-import { convertToWebP, createThumbnail } from '@/utils/imageUtils';
+import { convertToWebP, createThumbnail, isWebPAnimated } from '@/utils/imageUtils';
 
 export interface GenerationProgress {
   stage: 'generating' | 'removing_bg' | 'converting' | 'uploading' | 'complete';
@@ -137,6 +137,9 @@ export async function generateAndUploadSticker(
 
     const webpBlob = await convertToWebP(transparentBlob);
 
+    // Check if animated (after conversion - if animated, convertToWebP preserves it)
+    const isAnimated = await isWebPAnimated(webpBlob);
+
     // 4. Thumbnail oluştur
     const thumbnailBlob = await createThumbnail(transparentBlob);
 
@@ -181,7 +184,8 @@ export async function generateAndUploadSticker(
       seed: generated.seed,
       width: 512,
       height: 512,
-      size_bytes: webpBlob.size // Add file size
+      size_bytes: webpBlob.size,
+      is_animated: isAnimated // Track if animated
     });
 
     // Pipeline tamamen başarılı - şimdi krediyi düş

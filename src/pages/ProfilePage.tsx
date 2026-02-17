@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { useUserCredits } from "@/hooks/useUserCredits";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabase";
-import { Settings, ChevronRight, Crown, LogOut, Bell, Palette, Shield, HelpCircle, Coins, Star, Zap, Gift, Camera, Trash2, Package, Edit, MessageCircle, Share2, MoreVertical, StarIcon } from "lucide-react";
+import { Settings, ChevronRight, Crown, LogOut, Bell, Palette, Shield, HelpCircle, Coins, Star, Gift, Camera, Trash2, Package, Edit, MessageCircle, Share2, MoreVertical, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AvatarSelector } from "@/components/kloze/AvatarSelector";
@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { downloadWhatsAppPack } from "@/services/whatsappService";
 import { toast } from "sonner";
-// AdBanner removed
 import { Loader2, AlertCircle, Plus, X, Image as ImageIcon } from "lucide-react";
 import {
   Dialog,
@@ -31,22 +30,25 @@ import {
 } from "@/components/ui/dialog";
 
 import { monetizationService } from "@/services/monetizationService";
-import { PurchasesPackage } from "@revenuecat/purchases-capacitor";
-import { ProModal } from "@/components/monetization/ProModal";
 import { requestAppReview } from "@/components/kloze/AppReviewPrompt";
+import { useAuth } from "@/contexts/AuthContext";
+import { usePackInteractions } from "@/hooks/usePackInteractions";
 
 // ... existing code ...
 
 export default function ProfilePage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
+  const { userId: authUserId, credits, isPro } = useAuth();
+
+  // Centralized pack interactions
+  const { likedPackIds, setLikedPacks: setLikedPackIds, handleLike, isLiked } = usePackInteractions(authUserId);
   const [userAvatar, setUserAvatar] = useState(defaultAvatar);
-  const [userId, setUserId] = useState<string>("");
   const [currentEmail, setCurrentEmail] = useState<string>("");
   const [stickers, setStickers] = useState<Sticker[]>([]);
   const [packs, setPacks] = useState<StickerPack[]>([]);
   const [likedPacks, setLikedPacks] = useState<StickerPack[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { credits, isLoading: creditsLoading } = useUserCredits();
   const [statsData, setStatsData] = useState({
     generated: 0,
     downloads: 0,
@@ -54,10 +56,6 @@ export default function ProfilePage() {
     favoritesCount: 0
   });
   const [error, setError] = useState<string | null>(null);
-
-  // RevenueCat
-  const [packages, setPackages] = useState<PurchasesPackage[]>([]);
-  const [isPro, setIsPro] = useState(false);
 
   // Bulk Selection State
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -83,39 +81,13 @@ export default function ProfilePage() {
       try {
         console.log("ProfilePage: Starting loadData...");
 
-        // Init RC
-        await monetizationService.initialize().catch(err => console.error("RC Init Error:", err));
-
-        const offerings = await monetizationService.getOfferings().catch(() => []);
-        setPackages(offerings);
-
-        // Check Pro status from RevenueCat first, then fallback to database
-        let proStatus = await monetizationService.checkProStatus().catch(() => false);
-
-        // If RevenueCat says not pro, also check database (for admin-granted pro)
-        if (!proStatus) {
-          const user = await auth.getCurrentUser();
-          if (user) {
-            const { data: profile } = await supabase.from('profiles').select('is_pro').eq('id', user.id).single();
-            proStatus = profile?.is_pro || false;
-          }
-        }
-
-        setIsPro(proStatus);
-
         const user = await auth.getCurrentUser();
         console.log("ProfilePage: User session:", user ? "Found" : "Null");
 
         if (user) {
-          setUserId(user.id);
           setCurrentEmail(user.email || "");
 
           try {
-            // Credits handled by hook
-            // const { data: profile } = await supabase.from('profiles').select('credits').eq('id', user.id).single();
-            // const userCredits = profile?.credits || 0;
-            // setCredits(userCredits);
-
             const [stickersData, packsData, stats, likedData] = await Promise.all([
               getAllUserStickers(user.id),
               getUserPacks(user.id),
@@ -126,6 +98,10 @@ export default function ProfilePage() {
             setPacks(packsData);
             setStatsData(stats);
             setLikedPacks(likedData);
+
+            // Update liked pack IDs for centralized hook
+            const likedIds = new Set(likedData.map(p => p.id));
+            setLikedPackIds(likedIds);
           } catch (innerError) {
             console.error("Data fetch error details:", innerError);
             toast.error("Bazı veriler yüklenemedi.");
@@ -139,24 +115,13 @@ export default function ProfilePage() {
       }
     };
     loadData();
-  }, []);
-
-  // Pro Modal State
-  const [showProModal, setShowProModal] = useState(false);
-
-  // ... helpers ...
-
-  useEffect(() => {
-    // ... loadData ...
-  }, []);
-
-  const handlePurchase = () => {
-    setShowProModal(true);
-  };
+  }, [authUserId]);
 
   const handleRestore = async () => {
     const success = await monetizationService.restorePurchases();
-    if (success) setIsPro(true);
+    if (success) {
+      toast.success("Satın alımlar geri yüklendi!");
+    }
   };
 
   const handleDeleteSticker = async (id: string, e: React.MouseEvent) => {
@@ -236,7 +201,7 @@ export default function ProfilePage() {
       );
 
       // Refresh packs to show updated sticker counts
-      const updatedPacks = await getUserPacks(userId);
+      const updatedPacks = await getUserPacks(authUserId);
       setPacks(updatedPacks);
 
       setSelectedIds(new Set());
@@ -266,7 +231,7 @@ export default function ProfilePage() {
       const firstSticker = stickers.find(s => selectedIds.has(s.id));
 
       const newPack = await createStickerPack(
-        userId,
+        authUserId,
         packName,
         "Kloze User",
         ids,
@@ -340,7 +305,7 @@ export default function ProfilePage() {
       toast.success("Sticker paketten çıkarıldı");
 
       // Refresh packs
-      const updatedPacks = await getUserPacks(userId);
+      const updatedPacks = await getUserPacks(authUserId);
       setPacks(updatedPacks);
     } catch (e) {
       toast.error("Sticker çıkarılamadı");
@@ -366,7 +331,7 @@ export default function ProfilePage() {
       toast.success("Sticker pakete eklendi");
 
       // Refresh packs
-      const updatedPacks = await getUserPacks(userId);
+      const updatedPacks = await getUserPacks(authUserId);
       setPacks(updatedPacks);
     } catch (e) {
       toast.error("Sticker eklenemedi");
@@ -384,7 +349,7 @@ export default function ProfilePage() {
       if (success) {
         toast.success("Kapak fotoğrafı güncellendi");
         // Refresh packs to show new cover
-        const updatedPacks = await getUserPacks(userId);
+        const updatedPacks = await getUserPacks(authUserId);
         setPacks(updatedPacks);
       } else {
         toast.error("Kapak fotoğrafı güncellenemedi");
@@ -435,11 +400,10 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-28 relative">
+    <div className="min-h-screen bg-background pb-28 relative overflow-x-hidden">
       {/* Background */}
       <div className="fixed inset-0 mesh-gradient opacity-30 pointer-events-none" />
 
-      <ProModal open={showProModal} onOpenChange={setShowProModal} />
 
       {/* Bulk Action Bar - Sticky Bottom */}
       {isSelectionMode && (
@@ -651,7 +615,21 @@ export default function ProfilePage() {
             </div>
             <div className="grid grid-cols-3 gap-3">
               {likedPacks.map((pack) => (
-                <PackCard key={pack.id} pack={pack} size="sm" isLiked={true} />
+                <PackCard
+                  key={pack.id}
+                  pack={pack}
+                  size="sm"
+                  isLiked={isLiked(pack.id)}
+                  onLike={async (packId) => {
+                    const result = await handleLike(packId);
+                    if (result) {
+                      // Remove from liked packs list if unliked
+                      if (!result.liked) {
+                        setLikedPacks(prev => prev.filter(p => p.id !== packId));
+                      }
+                    }
+                  }}
+                />
               ))}
             </div>
           </div>
@@ -747,25 +725,64 @@ export default function ProfilePage() {
 
         {/* Go Pro Banner */}
         {!isPro && (
-          <div className="relative overflow-hidden rounded-3xl p-6 border border-primary/30">
-            {/* ... (keep content) ... */}
-            <div className="relative">
-              {/* ... */}
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                {/* ... */}
+          <div className="relative overflow-hidden rounded-3xl border border-amber-500/30">
+            {/* Gold gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 via-yellow-500/5 to-orange-500/10" />
+            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
+
+            <div className="relative p-6">
+              {/* Header */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
+                  <Crown className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black bg-gradient-to-r from-amber-300 to-orange-400 bg-clip-text text-transparent">
+                    Kloze PRO
+                  </h3>
+                  <p className="text-xs text-muted-foreground">Sınırsız sticker üretimi</p>
+                </div>
+              </div>
+
+              {/* Features */}
+              <div className="grid grid-cols-2 gap-2 mb-5">
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <Check className="w-2.5 h-2.5 text-green-400" />
+                  </div>
+                  Reklamsız
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <Check className="w-2.5 h-2.5 text-green-400" />
+                  </div>
+                  Sınırsız Üretim
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <Check className="w-2.5 h-2.5 text-green-400" />
+                  </div>
+                  Hızlı Sunucu
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <Check className="w-2.5 h-2.5 text-green-400" />
+                  </div>
+                  PRO Rozeti
+                </div>
               </div>
 
               <Button
-                onClick={handlePurchase}
-                className="w-full h-14 rounded-2xl gradient-primary text-lg font-bold glow-violet mb-3"
+                onClick={() => navigate('/credits')}
+                className="w-full h-12 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 text-black text-base font-bold shadow-lg shadow-amber-500/20 hover:brightness-110 transition-all"
               >
-                {packages.length > 0
-                  ? `${packages[0].product.priceString} / ${packages[0].packageType === 'ANNUAL' ? 'Yıl' : 'Ay'}`
-                  : "Şimdi Başla — ₺29.99/ay"}
+                PRO'ya Geç
               </Button>
 
-              <div className="text-center">
-                <button onClick={handleRestore} className="text-[10px] text-muted-foreground underline">Satın Alımları Geri Yükle</button>
+              <div className="text-center mt-3">
+                <button onClick={handleRestore} className="text-[10px] text-muted-foreground underline">
+                  Satın Alımları Geri Yükle
+                </button>
               </div>
             </div>
           </div>
@@ -860,7 +877,7 @@ export default function ProfilePage() {
           <button
             onClick={() => {
               if (confirm("Hesabını silmek istediğine emin misin? Bu işlem geri alınamaz.")) {
-                window.location.href = "mailto:johnaxe.storage@gmail.com?subject=Hesap Silme Talebi&body=Lütfen hesabımı ve verilerimi silin. Kullanıcı ID: " + userId;
+                window.location.href = "mailto:johnaxe.storage@gmail.com?subject=Hesap Silme Talebi&body=Lütfen hesabımı ve verilerimi silin. Kullanıcı ID: " + authUserId;
               }
             }}
             className="underline hover:text-destructive transition-colors"

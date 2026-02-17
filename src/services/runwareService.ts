@@ -165,12 +165,14 @@ export interface GeneratedSticker {
  * Generate Sticker (Image Inference)
  */
 export async function generateSticker(options: GenerateStickerOptions): Promise<GeneratedSticker> {
-  const prompt = `${options.prompt}, die-cut sticker, professional vector illustration, thick white border, solid flat white background, isolated on white background, high quality, 8k, clean edges, sticker style, vibrant colors, simple composition`;
+  // Prompt already enhanced by GeneratePage (translation + style + sticker keywords)
+  const prompt = options.prompt;
 
   const task = {
     taskType: "imageInference",
     positivePrompt: prompt,
-    negativePrompt: options.negativePrompt || 'complex background, shadows, photo-realistic, gradient, textured background, blurry, watermark, 3d render, shadows, text, signature, multiple objects, cluttered',
+    // Flux Schnell with CFGScale=1 ignores negative prompts, keep minimal
+    negativePrompt: options.negativePrompt || '',
     model: "runware:100@1", // Flux Schnell
     width: options.width || 512,
     height: options.height || 512,

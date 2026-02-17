@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { Share } from "@capacitor/share";
 import { toast } from "sonner";
-import { useState, memo } from "react";
+import { useState, memo, useCallback } from "react";
 import { ReportModal } from "./ReportModal";
 
 interface PackCardProps {
@@ -14,18 +14,19 @@ interface PackCardProps {
   onLike?: (id: string) => void;
 }
 
-export const PackCard = memo(function PackCard({ pack, size = "md", isLiked, onLike }: PackCardProps) {
+function PackCardComponent({ pack, size = "md", isLiked, onLike }: PackCardProps) {
   const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   // Use display_downloads if set by admin, otherwise real downloads
   const downloads = pack.display_downloads ?? pack.downloads ?? 0;
 
-  const formatDownloads = (num: number) => {
+  const formatDownloads = useCallback((num: number) => {
     if (num >= 1000) {
       return `${(num / 1000).toFixed(1)}K`;
     }
     return num.toString();
-  };
+  }, []);
 
   const sizeClasses = {
     sm: "rounded-2xl",
@@ -39,7 +40,7 @@ export const PackCard = memo(function PackCard({ pack, size = "md", isLiked, onL
     lg: "aspect-[16/10]",
   };
 
-  const handleShare = async (e: React.MouseEvent) => {
+  const handleShare = useCallback(async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -63,7 +64,13 @@ export const PackCard = memo(function PackCard({ pack, size = "md", isLiked, onL
         toast.success("Link kopyalandı!");
       }
     }
-  };
+  }, [pack.id, pack.title]);
+
+  const handleLikeClick = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onLike?.(pack.id);
+  }, [onLike, pack.id]);
 
   return (
     <Link
@@ -82,11 +89,9 @@ export const PackCard = memo(function PackCard({ pack, size = "md", isLiked, onL
         {/* Card Content */}
         <div
           className={cn(
-            "relative overflow-hidden transition-all duration-300",
+            "relative overflow-hidden",
             "bg-card border border-border/50",
             "shadow-[0_4px_20px_rgba(0,0,0,0.3)]",
-            "group-hover:-translate-y-1 group-hover:shadow-[0_8px_30px_rgba(0,0,0,0.4)]",
-            "active:translate-y-0 active:shadow-[0_2px_10px_rgba(0,0,0,0.3)]",
             sizeClasses[size]
           )}
         >
@@ -94,13 +99,24 @@ export const PackCard = memo(function PackCard({ pack, size = "md", isLiked, onL
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
           {/* Cover Image */}
-          <div className={cn("relative overflow-hidden", imageAspect[size])}>
+          <div className={cn("relative overflow-hidden bg-muted/20", imageAspect[size])}>
+            {/* Placeholder/Skeleton while loading */}
+            {!imageLoaded && (
+              <div className="absolute inset-0 bg-gradient-to-br from-muted/30 to-muted/10" />
+            )}
+
             <img
               src={pack.tray_image_url || pack.coverImage || pack.stickers?.[0]?.image_url || "/placeholder.png"}
               alt={pack.title || pack.name}
               loading="lazy"
               decoding="async"
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              width="512"
+              height="512"
+              onLoad={() => setImageLoaded(true)}
+              className={cn(
+                "w-full h-full object-cover",
+                imageLoaded ? "opacity-100" : "opacity-0"
+              )}
             />
 
             {/* Overlay Gradient */}
@@ -110,30 +126,26 @@ export const PackCard = memo(function PackCard({ pack, size = "md", isLiked, onL
 
             {/* Favorite Button */}
             <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onLike?.(pack.id);
-              }}
+              onClick={handleLikeClick}
               className={cn(
-                "absolute top-1.5 right-1.5 p-1.5 rounded-xl transition-all duration-200",
+                "absolute top-1.5 right-1.5 p-1.5 rounded-xl ",
                 "bg-background/50 backdrop-blur-sm border border-white/10",
-                "hover:scale-110 active:scale-90",
+                "",
                 "shadow-md",
                 isLiked && "bg-accent/30 border-accent/50"
               )}
             >
               <Heart
                 className={cn(
-                  "w-3 h-3 transition-colors",
+                  "w-3 h-3 ",
                   isLiked
                     ? "fill-accent text-accent"
-                    : "text-white/80"
+                    : "text-foreground/80"
                 )}
               />
               {/* Like Count */}
               {(pack.likes_count > 0 || isLiked) && (
-                <span className={cn("text-[8px] font-bold ml-1 transition-colors", isLiked ? "text-accent" : "text-white")}>
+                <span className={cn("text-[8px] font-bold ml-1 ", isLiked ? "text-accent" : "text-foreground")}>
                   {pack.likes_count || (isLiked ? 1 : 0)}
                 </span>
               )}
@@ -143,13 +155,13 @@ export const PackCard = memo(function PackCard({ pack, size = "md", isLiked, onL
             <button
               onClick={handleShare}
               className={cn(
-                "absolute top-1.5 left-1.5 p-1.5 rounded-xl transition-all duration-200",
-                "bg-background/50 backdrop-blur-sm border border-white/10",
-                "hover:scale-110 active:scale-90",
+                "absolute top-1.5 left-1.5 p-1.5 rounded-xl ",
+                "bg-background/50 backdrop-blur-sm border border-border/30",
+                "",
                 "shadow-md group/share"
               )}
             >
-              <Share2 className="w-3 h-3 text-white/80 group-hover/share:text-white transition-colors" />
+              <Share2 className="w-3 h-3 text-foreground/80  " />
             </button>
 
             {/* Report Button (Next to Share) */}
@@ -160,14 +172,14 @@ export const PackCard = memo(function PackCard({ pack, size = "md", isLiked, onL
                 setReportModalOpen(true);
               }}
               className={cn(
-                "absolute top-1.5 left-9 p-1.5 rounded-xl transition-all duration-200",
-                "bg-background/50 backdrop-blur-sm border border-white/10",
-                "hover:scale-110 active:scale-90",
+                "absolute top-1.5 left-9 p-1.5 rounded-xl ",
+                "bg-background/50 backdrop-blur-sm border border-border/30",
+                "",
                 "shadow-md group/report"
               )}
               title="İçeriği Rapor Et"
             >
-              <Flag className="w-3 h-3 text-white/80 group-hover/report:text-destructive transition-colors" />
+              <Flag className="w-3 h-3 text-foreground/80  " />
             </button>
 
             {/* Premium Badge (Moved down slightly or to bottom left if needed, keeping top left for share but maybe stacked?) */}
@@ -211,4 +223,20 @@ export const PackCard = memo(function PackCard({ pack, size = "md", isLiked, onL
       )}
     </Link>
   );
-});
+}
+
+// Custom comparison function for memo
+function arePropsEqual(prevProps: PackCardProps, nextProps: PackCardProps) {
+  // Only re-render if these specific props change
+  return (
+    prevProps.pack.id === nextProps.pack.id &&
+    prevProps.isLiked === nextProps.isLiked &&
+    prevProps.size === nextProps.size &&
+    prevProps.pack.downloads === nextProps.pack.downloads &&
+    prevProps.pack.likes === nextProps.pack.likes &&
+    prevProps.pack.title === nextProps.pack.title &&
+    prevProps.pack.tray_image_url === nextProps.pack.tray_image_url
+  );
+}
+
+export const PackCard = memo(PackCardComponent, arePropsEqual);

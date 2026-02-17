@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Chrome, Apple, Check, Wand2, Sparkles, Palette, Zap } from "lucide-react";
@@ -12,6 +12,7 @@ export default function AuthPage() {
     const [loading, setLoading] = useState(false);
     const [agreed, setAgreed] = useState(false);
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const navigate = useNavigate();
 
     // Deep link handling is done in App.tsx - no duplicate listener here
 
@@ -28,7 +29,9 @@ export default function AuthPage() {
                         try {
                             const { data: { session } } = await supabase.auth.getSession();
                             if (session) {
-                                console.log('[AuthPage] Session found on resume');
+                                console.log('[AuthPage] Session found on resume, redirecting...');
+                                navigate('/', { replace: true });
+                                return;
                             }
                         } catch (e) {
                             console.warn('[AuthPage] Session check failed:', e);
@@ -41,17 +44,21 @@ export default function AuthPage() {
             return () => {
                 resumeHandler.then(h => h.remove());
             };
-        } else {
-            // On web: listen for auth state change to reset loading
-            const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, _session) => {
-                setLoading(false);
-            });
-
-            return () => {
-                subscription.unsubscribe();
-            };
         }
-    }, []);
+
+        // Both native and web: listen for auth state change
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setLoading(false);
+            if (session) {
+                console.log('[AuthPage] Auth state changed, session found, redirecting...');
+                navigate('/', { replace: true });
+            }
+        });
+
+        return () => {
+            subscription.unsubscribe();
+        };
+    }, [navigate]);
 
     // Safety timeout: always reset loading after 30s to prevent permanent stuck state
     useEffect(() => {

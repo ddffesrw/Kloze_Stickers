@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
 import { BottomNav } from "@/components/kloze/BottomNav";
 import { EmojiSplash } from "@/components/kloze/EmojiSplash";
+import "@/i18n/config"; // Initialize i18n
 
 // Critical pages - eagerly loaded
 import HomePage from "./pages/HomePage";
@@ -43,6 +44,7 @@ import { useSharedImages } from "@/hooks/useSharedImages";
 import { toast } from "sonner";
 import { getGuestCredits, setGuestCredits } from "@/components/kloze/WatchAdButton";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -335,6 +337,7 @@ const App = () => {
 
   return (
     <ErrorBoundary>
+      <ThemeProvider>
       <AuthProvider session={session} loading={loading}>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
@@ -343,11 +346,11 @@ const App = () => {
           <OfflineIndicator />
           <BrowserRouter>
             <SharedImagesListener />
-            <div className="dark min-h-screen bg-background">
+            <div className="min-h-screen bg-background">
               <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
               <Routes>
-                {/* Auth & Legal - always accessible (even on web) */}
-                <Route path="/auth" element={<AuthPage />} />
+                {/* Auth - redirect to home if already logged in */}
+                <Route path="/auth" element={<PublicRoute session={session}><AuthPage /></PublicRoute>} />
                 <Route path="/legal" element={<LegalPage />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route path="/terms" element={<TermsOfService />} />
@@ -398,6 +401,7 @@ const App = () => {
         </TooltipProvider>
       </QueryClientProvider>
       </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 };

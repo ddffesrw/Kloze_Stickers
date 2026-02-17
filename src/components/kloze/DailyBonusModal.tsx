@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { adMobService } from "@/services/adMobService";
 import { supabase } from "@/lib/supabase";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface DailyBonusModalProps {
   userId: string;
@@ -28,6 +29,7 @@ export function DailyBonusModal({ userId, onClaim }: DailyBonusModalProps) {
   const [earnedCredits, setEarnedCredits] = useState(0);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [adWatched, setAdWatched] = useState(false);
+  const { credits, setCreditsLocal, refreshCredits: refreshAuthCredits } = useAuth();
 
   useEffect(() => {
     if (!userId) return;
@@ -54,6 +56,9 @@ export function DailyBonusModal({ userId, onClaim }: DailyBonusModalProps) {
       if (result.success) {
         setClaimed(true);
         setEarnedCredits(result.creditsEarned);
+        // Hemen lokal güncelle
+        setCreditsLocal(credits + result.creditsEarned);
+        refreshAuthCredits();
 
         toast.success(`+${result.creditsEarned} kredi kazandın! 🎉`);
         onClaim?.(result.creditsEarned);
@@ -85,6 +90,9 @@ export function DailyBonusModal({ userId, onClaim }: DailyBonusModalProps) {
         if (!error) {
           setAdWatched(true);
           setEarnedCredits(prev => prev + extraCredits);
+          // Hemen lokal güncelle
+          setCreditsLocal(credits + extraCredits);
+          refreshAuthCredits();
 
           toast.success(`+${extraCredits} bonus kredi kazandın! 🎬`);
           onClaim?.(extraCredits);
@@ -145,10 +153,10 @@ export function DailyBonusModal({ userId, onClaim }: DailyBonusModalProps) {
                 )}
               </div>
               <div className="flex-1">
-                <DialogTitle className="text-xl font-black text-white text-left">
+                <DialogTitle className="text-xl font-black text-foreground text-left">
                   {claimed ? "Tebrikler! 🎉" : "Günlük Bonus!"}
                 </DialogTitle>
-                <p className="text-white/60 text-xs mt-0.5">
+                <p className="text-muted-foreground text-xs mt-0.5">
                   {claimed
                     ? `+${earnedCredits} kredi hesabına eklendi!`
                     : bonusInfo.canClaim
@@ -168,7 +176,7 @@ export function DailyBonusModal({ userId, onClaim }: DailyBonusModalProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <Flame className={cn("w-4 h-4", nextStreakInfo.color)} />
-                <span className="font-bold text-white text-sm">Seri: {currentStreak} gün</span>
+                <span className="font-bold text-foreground text-sm">Seri: {currentStreak} gün</span>
               </div>
               <span className={cn("text-xs font-medium", nextStreakInfo.color)}>
                 {nextStreakInfo.emoji} {nextStreakInfo.title}
@@ -207,7 +215,7 @@ export function DailyBonusModal({ userId, onClaim }: DailyBonusModalProps) {
             <div className="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/20">
               <div className="flex items-center gap-2">
                 <Coins className="w-5 h-5 text-amber-400" />
-                <span className="text-white font-bold text-sm">Bugünkü Bonus</span>
+                <span className="text-foreground font-bold text-sm">Bugünkü Bonus</span>
               </div>
               <span className="text-2xl font-black text-amber-400">+{bonusInfo.bonusAmount}</span>
             </div>

@@ -5,6 +5,7 @@ import { adMobService } from "@/services/adMobService";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { getSetting } from "@/services/appSettingsService";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Simple signed guest credits to prevent localStorage manipulation
 const GUEST_CREDIT_KEY = 'guest_credits';
@@ -48,10 +49,10 @@ export function WatchAdButton({ onCreditEarned, className }: WatchAdButtonProps)
   const [watchingAd, setWatchingAd] = useState(false);
   const [adCooldown, setAdCooldown] = useState(false);
   const [rewardAmount, setRewardAmount] = useState(1);
+  const { userId, credits, setCreditsLocal, refreshCredits } = useAuth();
 
   useEffect(() => {
     getSetting('credit_reward_per_ad').then(amt => {
-      // If setting exists, use it. Default is 1 in service, but check again.
       if (typeof amt === 'number') setRewardAmount(amt);
     });
   }, []);
@@ -64,12 +65,10 @@ export function WatchAdButton({ onCreditEarned, className }: WatchAdButtonProps)
       const reward = await adMobService.showRewardVideo();
 
       if (reward) {
-        // Kredi ekle
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (user) {
+        if (userId) {
+          // LOGGED-IN USER: Add credits via RPC
           const { error } = await supabase.rpc('add_credits', {
-            user_id: user.id,
+            user_id: userId,
             amount: rewardAmount
           });
 
@@ -77,18 +76,24 @@ export function WatchAdButton({ onCreditEarned, className }: WatchAdButtonProps)
             console.error("Credit add error:", error);
             toast.error("Kredi eklenemedi, tekrar dene");
           } else {
+            // Hemen lokal state'i güncelle (Supabase'den çekmeyi bekleme)
+            setCreditsLocal(credits + rewardAmount);
             toast.success(`+${rewardAmount} Kredi kazandın! 🎬`, {
               icon: <Gift className="w-5 h-5 text-green-500" />,
               description: `${rewardAmount} sticker paketi indirebilirsin`
             });
             startCooldown();
             onCreditEarned?.();
+            // Arka planda Supabase'den doğru değeri de çek (sync)
+            refreshCredits();
           }
         } else {
           // GUEST USER: Save with signature verification
           const currentCredits = getGuestCredits();
           const newCredits = currentCredits + rewardAmount;
           setGuestCredits(newCredits);
+          // Hemen lokal state güncelle
+          setCreditsLocal(newCredits);
 
           toast.success(`+${rewardAmount} Kredi kazandın! 🎬`, {
             icon: <Gift className="w-5 h-5 text-green-500" />,

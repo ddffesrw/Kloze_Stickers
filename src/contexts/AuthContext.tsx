@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { getGuestCredits } from '@/components/kloze/WatchAdButton';
@@ -99,16 +99,19 @@ export function AuthProvider({ children, session, loading }: AuthProviderProps) 
     setCredits(c);
   }, []);
 
+  // Memoize context value to prevent unnecessary re-renders
+  const contextValue = useMemo(() => ({
+    session,
+    userId,
+    credits,
+    isPro,
+    isLoading: loading || (!profileLoaded && !!userId),
+    refreshCredits,
+    setCreditsLocal,
+  }), [session, userId, credits, isPro, loading, profileLoaded, refreshCredits, setCreditsLocal]);
+
   return (
-    <AuthContext.Provider value={{
-      session,
-      userId,
-      credits,
-      isPro,
-      isLoading: loading || (!profileLoaded && !!userId),
-      refreshCredits,
-      setCreditsLocal,
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

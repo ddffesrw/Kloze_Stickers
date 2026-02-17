@@ -4,7 +4,7 @@
  * Centralized logic for all Pack operations
  */
 
-import { supabase, type Database } from '@/lib/supabase';
+import { supabase, auth, type Database } from '@/lib/supabase';
 import { storageService, BUCKETS } from './storageService';
 import { createTrayIcon, compressImage } from '@/utils/imageUtils';
 import type { StickerPackInfo } from './whatsappStickerService';
@@ -213,22 +213,102 @@ export async function searchStickerPacks(query: string, limit: number = 30): Pro
  * Increment Download Count
  */
 export async function incrementDownloadCount(packId: string): Promise<void> {
-  const { error } = await supabase.rpc('increment_downloads', {
-    pack_id: packId
-  });
-  if (error) console.error('Download count increment failed:', error);
+  try {
+    // Record download in pack_downloads table (trigger will auto-increment the count)
+    const { error } = await supabase
+      .from('pack_downloads')
+      .insert({ pack_id: packId });
+
+    if (error) {
+      console.error('Download tracking failed:', error);
+      // Fallback: try RPC if it exists
+      const { error: rpcError } = await supabase.rpc('increment_downloads', {
+        pack_id: packId
+      });
+      if (rpcError) console.error('Download RPC also failed:', rpcError);
+    }
+  } catch (e) {
+    console.error('Download count increment failed:', e);
+  }
 }
 
 /**
- * Toggle Like
+ * Toggle Like - uses direct table operations (no RPC needed)
  */
 export async function togglePackLike(packId: string): Promise<{ liked: boolean, count: number } | null> {
-  const { data, error } = await supabase.rpc('toggle_pack_like', { p_pack_id: packId });
-  if (error) {
-    console.error("Like toggle failed:", error);
+  try {
+    // Get current user
+    const user = await auth.getCurrentUser();
+    if (!user) {
+      console.error("Like toggle failed: no user");
+      return null;
+    }
+
+    // Check if already liked
+    const { data: existing } = await supabase
+      .from('pack_likes')
+      .select('id')
+      .eq('pack_id', packId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    let liked: boolean;
+
+    if (existing) {
+      // Unlike - remove the like
+      const { error: deleteError } = await supabase
+        .from('pack_likes')
+        .delete()
+        .eq('pack_id', packId)
+        .eq('user_id', user.id);
+
+      if (deleteError) {
+        console.error("Unlike failed:", JSON.stringify(deleteError, null, 2));
+        return null;
+      }
+      liked = false;
+    } else {
+      // Like - insert new like
+      const { error: insertError } = await supabase
+        .from('pack_likes')
+        .insert({ pack_id: packId, user_id: user.id });
+
+      if (insertError) {
+        console.error("Like failed:", JSON.stringify(insertError, null, 2));
+        return null;
+      }
+      liked = true;
+    }
+
+    // Update likes_count on the pack
+    const { count, error: countError } = await supabase
+      .from('pack_likes')
+      .select('id', { count: 'exact', head: true })
+      .eq('pack_id', packId);
+
+    if (countError) {
+      console.error("Count failed:", JSON.stringify(countError, null, 2));
+      return { liked, count: 0 };
+    }
+
+    const newCount = count || 0;
+
+    const { error: updateError } = await supabase
+      .from('sticker_packs')
+      .update({ likes_count: newCount })
+      .eq('id', packId);
+
+    if (updateError) {
+      console.error("Update pack count failed:", JSON.stringify(updateError, null, 2));
+      // Don't fail - the like/unlike already succeeded
+    }
+
+    return { liked, count: newCount };
+  } catch (err: any) {
+    console.error("Like toggle failed - Error:", err?.message || err);
+    console.error("Like toggle failed - Full:", JSON.stringify(err, null, 2));
     return null;
   }
-  return data;
 }
 
 /**
@@ -836,18 +916,36 @@ export interface PlatformStats {
 export async function getPlatformStats(): Promise<PlatformStats> {
   try {
     // Get aggregate pack stats (use display_downloads if admin set it, otherwise real downloads)
-    const { data: packStats } = await supabase
+    const { data: packStats, error: packError } = await supabase
       .from('sticker_packs')
-      .select('downloads, display_downloads, likes_count');
+      .select('downloads, display_downloads, likes_count, sticker_count');
 
-    // Get total sticker count from stickers table
-    const { count: stickerCount } = await supabase
+    if (packError) {
+      console.error("getPlatformStats - pack query error:", packError);
+    }
+
+    // Try to get total sticker count from stickers table (if it exists and has data)
+    const { count: stickerCount, error: stickerError } = await supabase
       .from('stickers')
       .select('*', { count: 'exact', head: true });
 
-    const totalStickers = stickerCount || 0;
+    // If stickers table doesn't exist or has error, fall back to sum of sticker_count from packs
+    let totalStickers = 0;
+    if (stickerError) {
+      // Fallback: sum sticker_count from all packs
+      totalStickers = packStats?.reduce((sum, p) => sum + (p.sticker_count || 0), 0) || 0;
+    } else {
+      totalStickers = stickerCount || 0;
+      // If stickers table is empty but packs have sticker_count, use that instead
+      if (totalStickers === 0) {
+        totalStickers = packStats?.reduce((sum, p) => sum + (p.sticker_count || 0), 0) || 0;
+      }
+    }
+
     const totalDownloads = packStats?.reduce((sum, p) => sum + (p.display_downloads ?? p.downloads ?? 0), 0) || 0;
     const totalLikes = packStats?.reduce((sum, p) => sum + (p.likes_count || 0), 0) || 0;
+
+    console.log("Platform Stats:", { totalStickers, totalDownloads, totalLikes });
 
     return {
       totalStickers,

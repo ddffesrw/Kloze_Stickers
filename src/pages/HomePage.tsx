@@ -1,63 +1,59 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { Link } from "react-router-dom";
-import { Search, Flame, Clock, Sparkles, Download, Heart } from "lucide-react";
+import { Flame, Clock } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { TrendingCarousel } from "@/components/kloze/TrendingCarousel";
 import { CategoryPill } from "@/components/kloze/CategoryPill";
 import { PackCard } from "@/components/kloze/PackCard";
-import { FloatingStickers } from "@/components/kloze/FloatingStickers";
 import { CreditBadge } from "@/components/kloze/CreditBadge";
 import { WatchAdButton } from "@/components/kloze/WatchAdButton";
-import { NotificationBell } from "@/components/kloze/NotificationBell";
 import { PackGridSkeleton, CarouselSkeleton, CategoryPillsSkeleton, HeroBannerSkeleton } from "@/components/kloze/SkeletonLoaders";
 import { incrementReviewActionCount } from "@/components/kloze/AppReviewPrompt";
 import { categories } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { ComingSoonCard } from "@/components/kloze/ComingSoonCard";
 import { HeroBannerSlider } from "@/components/kloze/HeroBannerSlider";
-import { getTrendingStickerPacks, getNewStickerPacks, getUserLikedPackIds, togglePackLike, getPlatformStats, type PlatformStats } from "@/services/stickerPackService";
+import { ThemeToggle } from "@/components/kloze/ThemeToggle";
+import { LanguageSelector } from "@/components/kloze/LanguageSelector";
+import { getTrendingStickerPacks, getNewStickerPacks, getUserLikedPackIds, togglePackLike } from "@/services/stickerPackService";
 import { toast } from "sonner";
 import { getBlockedUsers } from "@/services/blockService";
 import { useAuth } from "@/contexts/AuthContext";
 
 const PACK_PAGE_SIZE = 12;
 
-// Module-level cache: survives component unmount/remount (navigating away and back)
-const homeCache = {
-  trendingPacks: [] as any[],
-  newPacks: [] as any[],
-  likedPackIds: new Set<string>(),
-  blockedUserIds: new Set<string>(),
-  hasMoreTrending: true,
-  hasMoreNew: true,
-  loaded: false,
-};
-
 export default function HomePage() {
+  const { t } = useTranslation();
+
   // Auth from global context - available immediately, no async wait
   const { userId, credits, isPro, refreshCredits } = useAuth();
 
   const [activeTab, setActiveTab] = useState<"trending" | "new">("trending");
-  const [trendingPacks, setTrendingPacks] = useState<any[]>(homeCache.trendingPacks);
-  const [newPacks, setNewPacks] = useState<any[]>(homeCache.newPacks);
-  const [likedPackIds, setLikedPackIds] = useState<Set<string>>(homeCache.likedPackIds);
-  const likedPackIdsRef = useRef<Set<string>>(homeCache.likedPackIds);
+  const [trendingPacks, setTrendingPacks] = useState<any[]>([]);
+  const [newPacks, setNewPacks] = useState<any[]>([]);
+  const [likedPackIds, setLikedPackIds] = useState<Set<string>>(new Set());
+  const likedPackIdsRef = useRef<Set<string>>(new Set());
 
   // Sync ref with state
   useEffect(() => {
     likedPackIdsRef.current = likedPackIds;
   }, [likedPackIds]);
-  const [isLoading, setIsLoading] = useState(!homeCache.loaded);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(homeCache.blockedUserIds);
+  const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
+  const blockedUserIdsRef = useRef<Set<string>>(new Set());
+
+  // Sync blocked users ref
+  useEffect(() => {
+    blockedUserIdsRef.current = blockedUserIds;
+  }, [blockedUserIds]);
 
   // Infinite scroll state
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMoreTrending, setHasMoreTrending] = useState(homeCache.hasMoreTrending);
-  const [hasMoreNew, setHasMoreNew] = useState(homeCache.hasMoreNew);
+  const [hasMoreTrending, setHasMoreTrending] = useState(true);
+  const [hasMoreNew, setHasMoreNew] = useState(true);
   const loadMoreRef = useRef<HTMLDivElement>(null);
-
-  // Platform stats
-  const [stats, setStats] = useState<PlatformStats | null>(null);
+  const loadMoreTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastLoadTimeRef = useRef<number>(0);
 
   // Load pack data (no auth calls needed - userId comes from context)
   const loadData = async () => {
@@ -77,11 +73,6 @@ export default function HomePage() {
       setHasMoreTrending(hmt);
       setHasMoreNew(hmn);
 
-      homeCache.trendingPacks = t;
-      homeCache.newPacks = n;
-      homeCache.hasMoreTrending = hmt;
-      homeCache.hasMoreNew = hmn;
-
       if (userId) {
         const [likedIds, blockedIds] = await Promise.all([
           getUserLikedPackIds(userId),
@@ -89,11 +80,7 @@ export default function HomePage() {
         ]);
         setLikedPackIds(likedIds);
         setBlockedUserIds(new Set(blockedIds));
-        homeCache.likedPackIds = likedIds;
-        homeCache.blockedUserIds = new Set(blockedIds);
       }
-
-      homeCache.loaded = true;
     } catch (e) {
       console.error("Home data load error", e);
     }
@@ -103,17 +90,10 @@ export default function HomePage() {
   // Fetch pack data on mount
   useEffect(() => {
     const initialLoad = async () => {
-      if (homeCache.loaded) {
-        setIsLoading(false);
-      } else {
-        await loadData();
-        setIsLoading(false);
-      }
+      await loadData();
+      setIsLoading(false);
     };
     initialLoad();
-
-    // Fetch platform stats (independent, can run anytime)
-    getPlatformStats().then(setStats);
   }, [userId]); // Re-fetch when user changes (login/logout)
 
   // Infinite scroll: load more packs
@@ -134,32 +114,22 @@ export default function HomePage() {
         : await getNewStickerPacks(PACK_PAGE_SIZE, offset);
 
       if (morePacks.length === 0) {
-        if (isTrending) { setHasMoreTrending(false); homeCache.hasMoreTrending = false; }
-        else { setHasMoreNew(false); homeCache.hasMoreNew = false; }
+        if (isTrending) { setHasMoreTrending(false); }
+        else { setHasMoreNew(false); }
       } else {
         // Deduplicate by id
         const existingIds = new Set(currentPacks.map(p => p.id));
         const uniqueNew = morePacks.filter(p => !existingIds.has(p.id));
 
         if (isTrending) {
-          setTrendingPacks(prev => {
-            const updated = [...prev, ...uniqueNew];
-            homeCache.trendingPacks = updated;
-            return updated;
-          });
+          setTrendingPacks(prev => [...prev, ...uniqueNew]);
           if (morePacks.length < PACK_PAGE_SIZE) {
             setHasMoreTrending(false);
-            homeCache.hasMoreTrending = false;
           }
         } else {
-          setNewPacks(prev => {
-            const updated = [...prev, ...uniqueNew];
-            homeCache.newPacks = updated;
-            return updated;
-          });
+          setNewPacks(prev => [...prev, ...uniqueNew]);
           if (morePacks.length < PACK_PAGE_SIZE) {
             setHasMoreNew(false);
-            homeCache.hasMoreNew = false;
           }
         }
       }
@@ -170,7 +140,7 @@ export default function HomePage() {
     }
   }, [activeTab, trendingPacks, newPacks, hasMoreTrending, hasMoreNew, isLoadingMore]);
 
-  // IntersectionObserver for infinite scroll
+  // IntersectionObserver for infinite scroll with debounce
   useEffect(() => {
     const el = loadMoreRef.current;
     if (!el) return;
@@ -178,14 +148,37 @@ export default function HomePage() {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !isLoading) {
-          loadMorePacks();
+          // Debounce: prevent multiple rapid calls
+          const now = Date.now();
+          const timeSinceLastLoad = now - lastLoadTimeRef.current;
+
+          // Only load if at least 500ms has passed since last load
+          if (timeSinceLastLoad < 500) {
+            return;
+          }
+
+          // Clear any pending timer
+          if (loadMoreTimerRef.current) {
+            clearTimeout(loadMoreTimerRef.current);
+          }
+
+          // Debounce the load call by 300ms
+          loadMoreTimerRef.current = setTimeout(() => {
+            lastLoadTimeRef.current = Date.now();
+            loadMorePacks();
+          }, 300);
         }
       },
       { rootMargin: '200px' }
     );
 
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (loadMoreTimerRef.current) {
+        clearTimeout(loadMoreTimerRef.current);
+      }
+    };
   }, [loadMorePacks, isLoading]);
 
   // 2. Handle Like
@@ -251,6 +244,10 @@ export default function HomePage() {
       : currentList;
   }, [activeTab, trendingPacks, newPacks, blockedUserIds, activeCategory]);
 
+  // Virtualization disabled - causes black screen issues with infinite scroll
+  // Other optimizations (debounce, memo, reduced animations) are sufficient
+  const shouldVirtualize = false;
+
   const categoryColors: Record<string, "violet" | "cyan" | "pink"> = {
     "Eğlence": "violet",
     "Anime": "pink",
@@ -265,25 +262,10 @@ export default function HomePage() {
     "Psychedelic": "violet",
   };
 
-  const [isLowPowerMode, setIsLowPowerMode] = useState(false);
-
-  useEffect(() => {
-    // Detect low-end devices (approximate check based on CPU cores)
-    // Most modern phones have 6-8 cores. Older/budget phones often have 4 or fewer.
-    if (typeof navigator !== 'undefined' && navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) {
-      setIsLowPowerMode(true);
-    }
-  }, []);
 
   return (
-    <div className="min-h-screen bg-background pb-28 relative">
-      {/* Background Effects - Only show on higher-end devices */}
-      {!isLowPowerMode && (
-        <>
-          <div className="fixed inset-0 mesh-gradient opacity-50 pointer-events-none" />
-          <FloatingStickers className="fixed" />
-        </>
-      )}
+    <div className="min-h-screen bg-background pb-28 relative overflow-x-hidden">
+      {/* Background Effects - Removed for performance */}
 
       {/* Header */}
       <header className="sticky top-0 z-40 glass-card border-b border-border/20">
@@ -294,91 +276,23 @@ export default function HomePage() {
             <p className="text-[9px] text-muted-foreground font-medium tracking-widest uppercase">Stickers</p>
           </div>
 
-          {/* Right Actions */}
-          <div className="flex items-center gap-1.5">
+          {/* Right Actions - Simplified */}
+          <div className="flex items-center gap-2">
             {!isPro && (
               <WatchAdButton onCreditEarned={refreshCredits} />
             )}
             <CreditBadge credits={credits} isPro={isPro} />
-            <Link
-              to="/search"
-              className="p-2 rounded-xl bg-muted/30 hover:bg-muted/50 border border-border/30 transition-all"
-            >
-              <Search className="w-4 h-4 text-muted-foreground" />
-            </Link>
-            {userId ? (
-              <NotificationBell userId={userId} />
-            ) : (
-              <Link
-                to="/auth"
-                className="text-xs font-bold bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:opacity-90 transition-opacity"
-              >
-                Giriş
-              </Link>
-            )}
+            <LanguageSelector variant="icon" />
+            <ThemeToggle />
           </div>
         </div>
       </header>
 
-      <main className="relative z-10 space-y-8 pt-6 overflow-auto pb-28">
-          {/* Hero Banner Slider */}
+      <main className="relative z-10 space-y-6 pt-6 pb-28 overflow-x-hidden">
+          {/* Hero Banner Slider - Bigger & More Prominent */}
           <div className="px-4">
             {isLoading ? <HeroBannerSkeleton /> : <HeroBannerSlider />}
           </div>
-
-          {/* Platform Stats Banner */}
-          {stats && (
-            <div className="px-4">
-              <div className="relative rounded-3xl p-6 overflow-hidden border border-border/30 bg-gradient-to-br from-background via-background/95 to-background">
-                {/* Animated gradient background */}
-                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 via-cyan-500/5 to-pink-500/10 pointer-events-none" />
-                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl" />
-                <div className="absolute bottom-0 left-0 w-32 h-32 bg-secondary/10 rounded-full blur-3xl" />
-
-                {/* Stats grid */}
-                <div className="relative z-10 grid grid-cols-3 gap-4">
-                  {/* Total Stickers */}
-                  <div className="text-center">
-                    <div className="w-12 h-12 mx-auto mb-2 rounded-2xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 flex items-center justify-center border border-violet-500/30 shadow-lg shadow-violet-500/10">
-                      <Sparkles className="w-6 h-6 text-violet-400" />
-                    </div>
-                    <p className="text-2xl font-black bg-gradient-to-br from-violet-400 to-purple-400 bg-clip-text text-transparent">
-                      {stats.totalStickers.toLocaleString()}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mt-1">
-                      Sticker
-                    </p>
-                  </div>
-
-                  {/* Total Downloads */}
-                  <div className="text-center">
-                    <div className="w-12 h-12 mx-auto mb-2 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-green-500/20 flex items-center justify-center border border-emerald-500/30 shadow-lg shadow-emerald-500/10">
-                      <Download className="w-6 h-6 text-emerald-400" />
-                    </div>
-                    <p className="text-2xl font-black bg-gradient-to-br from-emerald-400 to-green-400 bg-clip-text text-transparent">
-                      {stats.totalDownloads.toLocaleString()}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mt-1">
-                      İndirme
-                    </p>
-                  </div>
-
-                  {/* Total Likes */}
-                  <div className="text-center">
-                    <div className="w-12 h-12 mx-auto mb-2 rounded-2xl bg-gradient-to-br from-pink-500/20 to-rose-500/20 flex items-center justify-center border border-pink-500/30 shadow-lg shadow-pink-500/10">
-                      <Heart className="w-6 h-6 text-pink-400" />
-                    </div>
-                    <p className="text-2xl font-black bg-gradient-to-br from-pink-400 to-rose-400 bg-clip-text text-transparent">
-                      {stats.totalLikes.toLocaleString()}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mt-1">
-                      Beğeni
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Tabs */}
           <div className="flex items-center gap-4 px-4 border-b border-border/20">
@@ -390,7 +304,7 @@ export default function HomePage() {
               )}
             >
               <Flame className="w-4 h-4" />
-              <span className="font-bold">Trendler</span>
+              <span className="font-bold">{t('home.trending')}</span>
             </button>
             <button
               onClick={() => setActiveTab("new")}
@@ -400,7 +314,7 @@ export default function HomePage() {
               )}
             >
               <Clock className="w-4 h-4" />
-              <span className="font-bold">Yeni</span>
+              <span className="font-bold">{t('home.new')}</span>
             </button>
           </div>
 
@@ -419,14 +333,14 @@ export default function HomePage() {
 
           {/* Categories */}
           <div className="space-y-4">
-            <h2 className="text-lg font-bold text-foreground px-4">Kategoriler</h2>
+            <h2 className="text-lg font-bold text-foreground px-4">{t('home.categories')}</h2>
             {isLoading ? (
               <CategoryPillsSkeleton />
             ) : (
               <div className="flex gap-2 overflow-x-auto scrollbar-hide px-4 pb-2">
                 <CategoryPill
                   emoji="✨"
-                  name="Tümü"
+                  name={t('common.all')}
                   isActive={activeCategory === null}
                   onClick={() => setActiveCategory(null)}
                   color="violet"
@@ -435,7 +349,7 @@ export default function HomePage() {
                   <CategoryPill
                     key={cat.id}
                     emoji={cat.emoji}
-                    name={cat.name}
+                    name={t(`categories.${cat.name}`)}
                     isActive={activeCategory === cat.name}
                     onClick={() => setActiveCategory(cat.name)}
                     color={categoryColors[cat.name] || "default"}
@@ -478,7 +392,7 @@ export default function HomePage() {
                 {isLoadingMore && (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                    <span className="text-sm">Yükleniyor...</span>
+                    <span className="text-sm">{t('home.loadingMore')}</span>
                   </div>
                 )}
               </div>
@@ -487,7 +401,7 @@ export default function HomePage() {
             {/* No more packs indicator */}
             {!isLoading && !(activeTab === "trending" ? hasMoreTrending : hasMoreNew) && filteredPacks.length > 0 && !activeCategory && (
               <div className="text-center py-4">
-                <p className="text-xs text-muted-foreground">Tüm paketler yüklendi ✨</p>
+                <p className="text-xs text-muted-foreground">{t('home.noMorePacks')} ✨</p>
               </div>
             )}
 

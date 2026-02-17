@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { auth, supabase } from "@/lib/supabase";
 import { removeBackground } from "@/services/backgroundRemovalService";
 import { storageService, BUCKETS } from "@/services/storageService";
+import { convertToWebP, createThumbnail, isWebPAnimated } from "@/utils/imageUtils";
 import { useUserCredits } from "@/hooks/useUserCredits";
 import { NoCreditModal } from "@/components/kloze/NoCreditModal";
 
@@ -124,10 +125,10 @@ export default function GalleryUploadPage() {
         setIsProcessing(true);
         const toastId = toast.loading("Sticker oluşturuluyor...");
 
-        let bgRemovedUrl: string | null = null;
-
         try {
-            let finalImage = croppedImage;
+            // Convert cropped base64 to blob
+            const croppedResponse = await fetch(croppedImage);
+            let imageBlob = await croppedResponse.blob();
 
             // Background removal if enabled
             if (removeBg) {
@@ -139,14 +140,9 @@ export default function GalleryUploadPage() {
 
                 toast.loading("Arka plan siliniyor...", { id: toastId });
 
-                // Convert base64 to blob
-                const response = await fetch(croppedImage);
-                const blob = await response.blob();
-
-                const result = await removeBackground(blob);
-                if (result) {
-                    bgRemovedUrl = URL.createObjectURL(result);
-                    finalImage = bgRemovedUrl;
+                const bgResult = await removeBackground(imageBlob);
+                if (bgResult) {
+                    imageBlob = bgResult;
 
                     // Deduct credit for non-Pro users
                     if (!isPro) {
@@ -156,25 +152,38 @@ export default function GalleryUploadPage() {
                 }
             }
 
-            // Upload to Supabase
+            // Convert to WhatsApp-compatible WebP (512x512, <100KB static / <500KB animated)
+            toast.loading("WebP'e dönüştürülüyor...", { id: toastId });
+            const webpBlob = await convertToWebP(imageBlob);
+
+            // Check if animated
+            const isAnimated = await isWebPAnimated(webpBlob);
+            if (isAnimated) {
+                toast.loading("Animasyonlu sticker algılandı! 🎬", { id: toastId });
+            }
+
+            const thumbnailBlob = await createThumbnail(imageBlob);
+
+            // Upload sticker + thumbnail to Supabase (parallel)
             toast.loading("Kaydediliyor...", { id: toastId });
+            const timestamp = Date.now();
 
-            const imageResponse = await fetch(finalImage);
-            const imageBlob = await imageResponse.blob();
-            const fileName = `${user.id}/${Date.now()}_gallery.webp`;
+            const [stickerUpload, thumbUpload] = await Promise.all([
+                storageService.upload(BUCKETS.STICKERS, `${user.id}/${timestamp}_gallery.webp`, webpBlob),
+                storageService.upload(BUCKETS.THUMBNAILS, `${user.id}/${timestamp}_gallery_thumb.webp`, thumbnailBlob)
+            ]);
 
-            const { publicUrl } = await storageService.upload(
-                BUCKETS.STICKERS,
-                fileName,
-                imageBlob
-            );
-
-            // Save to database
+            // Save to database with full metadata
             await supabase.from('user_stickers').insert({
                 user_id: user.id,
-                image_url: publicUrl,
+                image_url: stickerUpload.publicUrl,
+                thumbnail_url: thumbUpload.publicUrl,
                 prompt: 'Gallery Upload',
-                emojis: ['📷']
+                emojis: ['📷'],
+                width: 512,
+                height: 512,
+                size_bytes: webpBlob.size,
+                is_animated: isAnimated
             });
 
             toast.success("Sticker oluşturuldu! 🎉", { id: toastId });
@@ -184,7 +193,6 @@ export default function GalleryUploadPage() {
             console.error("Sticker creation error:", error);
             toast.error(error.message || "İşlem başarısız", { id: toastId });
         } finally {
-            if (bgRemovedUrl) URL.revokeObjectURL(bgRemovedUrl);
             setIsProcessing(false);
         }
     };

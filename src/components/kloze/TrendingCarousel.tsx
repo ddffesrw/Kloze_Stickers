@@ -23,7 +23,7 @@ export function TrendingCarousel({ packs, likedPackIds, onLike }: TrendingCarous
         </div>
         <Link
           to="/search"
-          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 "
         >
           Tümü
           <ArrowRight className="w-3 h-3" />
@@ -39,14 +39,16 @@ export function TrendingCarousel({ packs, likedPackIds, onLike }: TrendingCarous
                 to={`/pack/${pack.id}`}
                 className="block"
               >
-                <div className="relative aspect-[3/4] rounded-2xl overflow-hidden glass-card border border-border/30 group-hover:border-primary/30 transition-all group-hover:scale-[1.02] active:scale-[0.98]">
+                <div className="relative aspect-[3/4] rounded-2xl overflow-hidden glass-card border border-border/30 ">
                   {/* Background Image */}
                   <img
                     src={pack.tray_image_url || pack.coverImage}
                     alt={pack.title || pack.name}
                     loading="lazy"
                     decoding="async"
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    width="384"
+                    height="512"
+                    className="w-full h-full object-cover "
                   />
 
                   {/* Gradient Overlay */}
@@ -72,16 +74,16 @@ export function TrendingCarousel({ packs, likedPackIds, onLike }: TrendingCarous
                       onLike?.(pack.id);
                     }}
                     className={cn(
-                      "absolute top-2 right-2 p-1.5 rounded-xl transition-all duration-200 z-20",
-                      "bg-background/50 backdrop-blur-sm border border-white/10",
-                      "hover:scale-110 active:scale-90",
+                      "absolute top-2 right-2 p-1.5 rounded-xl  z-20",
+                      "bg-background/50 backdrop-blur-sm border border-border/30",
+                      "",
                       isLiked && "bg-accent/30 border-accent/50"
                     )}
                   >
                     <Heart
                       className={cn(
-                        "w-3 h-3 transition-colors",
-                        isLiked ? "fill-accent text-accent" : "text-white/80"
+                        "w-3 h-3 ",
+                        isLiked ? "fill-accent text-accent" : "text-foreground/80"
                       )}
                     />
                   </button>

@@ -5,12 +5,46 @@
  */
 
 /**
+ * Check if a WebP blob is animated
+ * Reads WebP header to detect VP8X chunk with animation flag
+ */
+export async function isWebPAnimated(blob: Blob): Promise<boolean> {
+    try {
+        // Read first 21 bytes (enough for VP8X header check)
+        const arrayBuffer = await blob.slice(0, 21).arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+
+        // Check RIFF header
+        if (bytes.length < 21) return false;
+        if (bytes[0] !== 0x52 || bytes[1] !== 0x49 || bytes[2] !== 0x46 || bytes[3] !== 0x46) return false; // "RIFF"
+
+        // Check WEBP signature
+        if (bytes[8] !== 0x57 || bytes[9] !== 0x45 || bytes[10] !== 0x42 || bytes[11] !== 0x50) return false; // "WEBP"
+
+        // Check for VP8X chunk (extended format with animation support)
+        if (bytes[12] === 0x56 && bytes[13] === 0x50 && bytes[14] === 0x38 && bytes[15] === 0x58) { // "VP8X"
+            const flags = bytes[20];
+            const isAnimated = (flags & 0x02) !== 0; // Bit 1 = animation flag
+            return isAnimated;
+        }
+
+        return false;
+    } catch (e) {
+        console.error('Error checking WebP animation:', e);
+        return false;
+    }
+}
+
+/**
  * Tray Icon (Strictly 96x96, < 50KB, PNG or WebP)
  * WhatsApp Requirement: 96x96 pixels, < 50KB
+ * Note: Tray icon is always static (even for animated packs) - uses first frame
  */
 export async function createTrayIcon(sourceImageUrl: string): Promise<Blob> {
     const response = await fetch(sourceImageUrl);
     const blob = await response.blob();
+
+    // For animated WebP, createImageBitmap returns first frame - perfect for tray icon
     const img = await createImageBitmap(blob);
 
     const canvas = document.createElement('canvas');
@@ -73,10 +107,31 @@ export async function createThumbnail(blob: Blob): Promise<Blob> {
 }
 
 /**
- * WebP formatına çevir (512x512, < 100KB)
- * WhatsApp standardı için STRICT 100KB limit
+ * WebP formatına çevir (512x512, < 100KB static / < 500KB animated)
+ * WhatsApp standardı için STRICT size limits
+ * Animated WebP'leri korur (canvas render etmez)
  */
 export async function convertToWebP(blob: Blob): Promise<Blob> {
+    // Check if already animated WebP - preserve it!
+    const isAnimated = await isWebPAnimated(blob);
+
+    if (isAnimated) {
+        console.log('[convertToWebP] Animated WebP detected - preserving animation');
+        const MAX_ANIMATED_SIZE = 500 * 1024; // 500KB for animated
+
+        // If already WebP and under limit, return as-is
+        if (blob.type === 'image/webp' && blob.size < MAX_ANIMATED_SIZE) {
+            console.log(`[convertToWebP] Animated WebP size OK: ${blob.size} bytes`);
+            return blob;
+        }
+
+        // If too large, we can't compress animated WebP in browser
+        // Return as-is and let native plugin handle it
+        console.warn(`[convertToWebP] Animated WebP too large (${blob.size} bytes), passing to native`);
+        return blob;
+    }
+
+    // Static image - use canvas rendering
     return new Promise((resolve, reject) => {
         const img = new Image();
         const canvas = document.createElement('canvas');
@@ -97,7 +152,7 @@ export async function convertToWebP(blob: Blob): Promise<Blob> {
             ctx.clearRect(0, 0, 512, 512);
             ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
 
-            // Strict 100KB Limit Loop
+            // Strict 100KB Limit Loop (static only)
             let quality = 0.9;
             let resultBlob: Blob | null = null;
             const MAX_SIZE = 100 * 1024; // 100KB
@@ -130,8 +185,28 @@ export async function convertToWebP(blob: Blob): Promise<Blob> {
 /**
  * Helper: Compress Image to <300KB WebP (Max 512px)
  * Used for Admin Uploads mainly
+ * Preserves animated WebP
  */
 export async function compressImage(file: File | Blob, startQuality: number = 0.85, maxDimension: number = 512): Promise<Blob> {
+    // Check if animated WebP - preserve it!
+    const isAnimated = await isWebPAnimated(file);
+
+    if (isAnimated) {
+        console.log('[compressImage] Animated WebP detected - skipping compression');
+        const MAX_ANIMATED_SIZE = 500 * 1024; // 500KB for animated
+
+        // If under limit, return as-is
+        if (file.size < MAX_ANIMATED_SIZE) {
+            console.log(`[compressImage] Animated WebP size OK: ${file.size} bytes`);
+            return file instanceof Blob ? file : new Blob([file]);
+        }
+
+        // Too large - can't compress animated WebP in browser
+        console.warn(`[compressImage] Animated WebP too large (${file.size} bytes), returning as-is`);
+        return file instanceof Blob ? file : new Blob([file]);
+    }
+
+    // Static image - compress normally
     const MAX_SIZE_BYTES = 300 * 1024; // 300KB
     let quality = startQuality;
 

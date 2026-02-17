@@ -18,10 +18,13 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { LanguageSelector } from "@/components/kloze/LanguageSelector";
+import { useTranslation } from "react-i18next";
 // import { useTheme } from "@/components/theme-provider"; // Removed as file likely missing
 
 // function SettingsPage...
 export default function SettingsPage() {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -117,7 +120,7 @@ export default function SettingsPage() {
                             />
                         </div>
 
-                        <div className="flex items-center justify-between p-4">
+                        <div className="flex items-center justify-between p-4 border-b border-border/20">
                             <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-purple-500/10 flex items-center justify-center">
                                     <Moon className="w-4 h-4 text-purple-500" />
@@ -132,6 +135,19 @@ export default function SettingsPage() {
                                 onCheckedChange={setDarkMode}
                                 disabled // Force dark mode for now as app is "dark min-h-screen"
                             />
+                        </div>
+
+                        <div className="p-4">
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center">
+                                    <Globe className="w-4 h-4 text-amber-500" />
+                                </div>
+                                <div>
+                                    <p className="font-medium">Dil / Language</p>
+                                    <p className="text-xs text-muted-foreground">Uygulama dilini seç</p>
+                                </div>
+                            </div>
+                            <LanguageSelector variant="full" />
                         </div>
 
                     </div>

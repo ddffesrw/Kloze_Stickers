@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { Coins, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditModal } from "./CreditModal";
@@ -9,7 +9,7 @@ interface CreditBadgeProps {
   className?: string;
 }
 
-export function CreditBadge({ credits, isPro = false, className }: CreditBadgeProps) {
+function CreditBadgeComponent({ credits, isPro = false, className }: CreditBadgeProps) {
   const [modalOpen, setModalOpen] = useState(false);
 
   return (
@@ -55,3 +55,5 @@ export function CreditBadge({ credits, isPro = false, className }: CreditBadgePr
     </>
   );
 }
+
+export const CreditBadge = memo(CreditBadgeComponent);

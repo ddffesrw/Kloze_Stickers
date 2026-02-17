@@ -4,15 +4,17 @@ import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { auth } from "@/lib/supabase";
 import { isAdminAvailable, isAndroid, isIOS } from "@/lib/platform";
+import { useTranslation } from "react-i18next";
 
 const navItems = [
-  { path: "/", icon: Home, label: "Ana Sayfa" },
-  { path: "/generate", icon: Sparkles, label: "Üret" },
-  { path: "/search", icon: Compass, label: "Keşfet" },
-  { path: "/profile", icon: User, label: "Profil" },
+  { path: "/", icon: Home, labelKey: "navigation.home" },
+  { path: "/generate", icon: Sparkles, labelKey: "navigation.generate" },
+  { path: "/search", icon: Compass, labelKey: "navigation.discover" },
+  { path: "/profile", icon: User, labelKey: "navigation.profile" },
 ];
 
 export function BottomNav() {
+  const { t } = useTranslation();
   const location = useLocation();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -56,7 +58,7 @@ export function BottomNav() {
             const isProfile = item.path === "/profile";
             // Guest users: redirect profile to auth
             const path = isProfile && !isLoggedIn ? "/auth" : item.path;
-            const label = isProfile && !isLoggedIn ? "Giriş Yap" : item.label;
+            const label = isProfile && !isLoggedIn ? t('auth.login') : t(item.labelKey);
             const isActive = location.pathname === path;
             const Icon = item.icon;
 

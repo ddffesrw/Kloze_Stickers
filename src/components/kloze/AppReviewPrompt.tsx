@@ -171,12 +171,12 @@ export function AppReviewPrompt({
 
   return (
     <Dialog open={showPrompt} onOpenChange={setShowPrompt}>
-      <DialogContent className="glass-card gradient-dark border-white/10 max-w-sm">
+      <DialogContent className="glass-card border-border/50 max-w-sm">
         <button
           onClick={handleDismiss}
-          className="absolute top-4 right-4 p-1 rounded-full hover:bg-white/10"
+          className="absolute top-4 right-4 p-1 rounded-full hover:bg-muted/20"
         >
-          <X className="w-4 h-4 text-white/60" />
+          <X className="w-4 h-4 text-muted-foreground" />
         </button>
 
         <DialogHeader className="space-y-4">
@@ -185,11 +185,11 @@ export function AppReviewPrompt({
             <Heart className="w-10 h-10 text-pink-500 fill-pink-500" />
           </div>
 
-          <DialogTitle className="text-center text-xl font-bold text-white">
+          <DialogTitle className="text-center text-xl font-bold text-foreground">
             KLOZE'u seviyor musun? 💕
           </DialogTitle>
 
-          <p className="text-center text-white/70 text-sm">
+          <p className="text-center text-muted-foreground text-sm">
             Uygulamamızı değerlendirmen bizi çok mutlu eder ve diğer kullanıcılara yardımcı olur!
           </p>
         </DialogHeader>
@@ -209,7 +209,7 @@ export function AppReviewPrompt({
                   "w-10 h-10 transition-colors",
                   (hoveredRating || rating) >= star
                     ? "text-yellow-400 fill-yellow-400"
-                    : "text-white/20"
+                    : "text-muted-foreground/20"
                 )}
               />
             </button>
@@ -217,7 +217,7 @@ export function AppReviewPrompt({
         </div>
 
         {/* Rating feedback */}
-        <p className="text-center text-sm text-white/60 min-h-[20px]">
+        <p className="text-center text-sm text-muted-foreground min-h-[20px]">
           {rating === 5 && "Harika! 🎉"}
           {rating === 4 && "Güzel! 😊"}
           {rating === 3 && "Fena değil 🙂"}
@@ -254,7 +254,7 @@ export function AppReviewPrompt({
           <Button
             onClick={handleLater}
             variant="ghost"
-            className="w-full text-white/60 hover:text-white"
+            className="w-full text-muted-foreground hover:text-foreground"
           >
             Daha Sonra
           </Button>
@@ -264,7 +264,7 @@ export function AppReviewPrompt({
         {rating >= 4 && (
           <button
             onClick={openStore}
-            className="flex items-center justify-center gap-1 text-xs text-white/40 hover:text-white/60 mt-2"
+            className="flex items-center justify-center gap-1 text-xs text-muted-foreground/40 hover:text-muted-foreground/60 mt-2"
           >
             <ExternalLink className="w-3 h-3" />
             Play Store'u doğrudan aç

@@ -1,54 +1,52 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { Search, X, TrendingUp, Sparkles, Loader2 } from "lucide-react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { Search, X, TrendingUp, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { CategoryPill } from "@/components/kloze/CategoryPill";
 import { PackCard } from "@/components/kloze/PackCard";
 import { CreditBadge } from "@/components/kloze/CreditBadge";
-import { WatchAdButton, getGuestCredits, setGuestCredits } from "@/components/kloze/WatchAdButton";
+import { WatchAdButton } from "@/components/kloze/WatchAdButton";
 import { categories } from "@/data/mockData";
 import { cn } from "@/lib/utils";
-import { getAllStickerPacks, searchStickerPacks } from "@/services/stickerPackService";
+import { getAllStickerPacks, getUserLikedPackIds, togglePackLike } from "@/services/stickerPackService";
 import { ComingSoonCard } from "@/components/kloze/ComingSoonCard";
 import { getBlockedUsers } from "@/services/blockService";
-import { auth, supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import { incrementReviewActionCount } from "@/components/kloze/AppReviewPrompt";
 
 export default function SearchPage() {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [isFocused, setIsFocused] = useState(false);
   const [allPacks, setAllPacks] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
-  const [credits, setCredits] = useState(0);
-  const [isPro, setIsPro] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [likedPackIds, setLikedPackIds] = useState<Set<string>>(new Set());
+  const likedPackIdsRef = useRef<Set<string>>(new Set());
+
+  // Sync ref with state
+  useEffect(() => {
+    likedPackIdsRef.current = likedPackIds;
+  }, [likedPackIds]);
+
+  const { userId, credits, isPro, refreshCredits } = useAuth();
 
   // Fetch real packs from Supabase
   useEffect(() => {
     const loadPacks = async () => {
       try {
-        const [packs, user] = await Promise.all([
-          getAllStickerPacks(),
-          auth.getCurrentUser()
-        ]);
+        const packs = await getAllStickerPacks();
         setAllPacks(packs || []);
 
-        if (user) {
-          setUserId(user.id);
-          const [blockedIds, profile] = await Promise.all([
+        if (userId) {
+          const [blockedIds, likedIds] = await Promise.all([
             getBlockedUsers(),
-            supabase.from('profiles').select('credits, is_pro').eq('id', user.id).single()
+            getUserLikedPackIds(userId)
           ]);
           setBlockedUserIds(new Set(blockedIds));
-          if (profile.data) {
-            setCredits(profile.data.credits || 0);
-            setIsPro(profile.data.is_pro || false);
-          }
-        } else {
-          // Guest User: Read Local Storage
-          const guestCredits = getGuestCredits();
-          setCredits(guestCredits);
+          setLikedPackIds(likedIds);
         }
       } catch (e) {
         console.error("Packs load error:", e);
@@ -57,18 +55,7 @@ export default function SearchPage() {
       }
     };
     loadPacks();
-
-    // Listen for guest credit updates
-    const handleGuestCreditsUpdate = () => {
-      const guestCredits = getGuestCredits();
-      setCredits(guestCredits);
-    };
-    window.addEventListener('guest-credits-updated', handleGuestCreditsUpdate);
-
-    return () => {
-      window.removeEventListener('guest-credits-updated', handleGuestCreditsUpdate);
-    };
-  }, []);
+  }, [userId]);
 
   const toggleCategory = (categoryName: string) => {
     setSelectedCategories((prev) =>
@@ -78,73 +65,96 @@ export default function SearchPage() {
     );
   };
 
-  const filteredPacks = allPacks.filter((pack) => {
-    const matchesQuery =
-      !query ||
-      (pack.name || pack.title || "").toLowerCase().includes(query.toLowerCase()) ||
-      (pack.publisher || pack.creator || "").toLowerCase().includes(query.toLowerCase());
+  // Handle Like
+  const handleLike = useCallback(async (packId: string) => {
+    const currentLikedIds = likedPackIdsRef.current;
 
-    const matchesCategory =
-      selectedCategories.length === 0 ||
-      selectedCategories.includes(pack.category);
+    if (!userId) {
+      toast.error("Beğenmek için giriş yapmalısınız 🔒");
+      return;
+    }
 
-    const isNotBlocked = !blockedUserIds.has(pack.user_id);
+    const isLiked = currentLikedIds.has(packId);
 
-    return matchesQuery && matchesCategory && isNotBlocked;
-  });
+    // Optimistic Update for ID Set
+    setLikedPackIds(prev => {
+      const newSet = new Set(prev);
+      if (isLiked) newSet.delete(packId);
+      else newSet.add(packId);
+      return newSet;
+    });
+
+    // Optimistic Update for Count
+    setAllPacks(prev => prev.map(p => {
+      if (p.id === packId) {
+        const currentCount = p.likes_count || 0;
+        return {
+          ...p,
+          likes_count: isLiked ? Math.max(0, currentCount - 1) : currentCount + 1
+        };
+      }
+      return p;
+    }));
+
+    // Call API
+    const result = await togglePackLike(packId);
+    if (!result) {
+      // Revert on error
+      setLikedPackIds(prev => {
+        const newSet = new Set(prev);
+        if (isLiked) newSet.add(packId);
+        else newSet.delete(packId);
+        return newSet;
+      });
+      toast.error("İşlem başarısız 😕");
+    } else {
+      incrementReviewActionCount();
+    }
+  }, [userId]);
+
+  const filteredPacks = useMemo(() => {
+    return allPacks.filter((pack) => {
+      const matchesQuery =
+        !query ||
+        (pack.name || pack.title || "").toLowerCase().includes(query.toLowerCase()) ||
+        (pack.publisher || pack.creator || "").toLowerCase().includes(query.toLowerCase());
+
+      const matchesCategory =
+        selectedCategories.length === 0 ||
+        selectedCategories.includes(pack.category);
+
+      const isNotBlocked = !blockedUserIds.has(pack.user_id);
+
+      return matchesQuery && matchesCategory && isNotBlocked;
+    });
+  }, [allPacks, query, selectedCategories, blockedUserIds]);
 
   const popularSearches = ["Meme", "Kedi", "Anime", "Aşk", "Komik", "Gamer"];
 
   return (
-    <div className="min-h-screen bg-background pb-28 relative">
-      {/* Background */}
-      <div className="fixed inset-0 mesh-gradient opacity-30 pointer-events-none" />
+    <div className="min-h-screen bg-background pb-28 relative overflow-x-hidden">
+      {/* Background - Removed for performance */}
 
-      {/* Header */}
+      {/* Header - Ana sayfa ile aynı stil */}
       <header className="sticky top-0 z-40 glass-card border-b border-border/20">
-        <div className="p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-secondary/20 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-secondary" />
-              </div>
-              <div>
-                <h1 className="text-xl font-black gradient-text-alt">KEŞFET</h1>
-                <p className="text-[10px] text-muted-foreground -mt-1">Binlerce sticker paketi</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {!isPro && (
-                <WatchAdButton
-                  onCreditEarned={() => {
-                    auth.getCurrentUser().then(async user => {
-                      if (user) {
-                        const { data: profile } = await supabase
-                          .from('profiles')
-                          .select('credits')
-                          .eq('id', user.id)
-                          .single();
-                        if (profile) setCredits(profile.credits || 0);
-                      } else {
-                        // GUEST: Read from local storage
-                        const guestCredits = getGuestCredits();
-                        setCredits(guestCredits);
-                      }
-                    });
-                  }}
-                />
-              )}
-              <CreditBadge credits={credits} isPro={isPro} />
-
-              {!userId && (
-                <Link to="/auth" className="text-sm font-bold bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:opacity-90 transition-opacity">
-                  Giriş Yap
-                </Link>
-              )}
-            </div>
+        <div className="flex items-center justify-between px-4 py-3">
+          {/* Brand */}
+          <div className="flex-shrink-0">
+            <h1 className="text-lg font-black gradient-text leading-none">KLOZE</h1>
+            <p className="text-[9px] text-muted-foreground font-medium tracking-widest uppercase">Stickers</p>
           </div>
 
-          {/* Search Input */}
+          {/* Right Actions - Simplified */}
+          <div className="flex items-center gap-2">
+            {!isPro && (
+              <WatchAdButton onCreditEarned={refreshCredits} />
+            )}
+            <CreditBadge credits={credits} isPro={isPro} />
+          </div>
+        </div>
+
+        {/* Search Input */}
+        <div className="px-4 pb-3">
           <div className={cn(
             "relative rounded-2xl transition-all duration-300",
             isFocused && "ring-2 ring-primary/50"
@@ -155,8 +165,8 @@ export default function SearchPage() {
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder="Sticker paketi ara..."
-              className="pl-12 pr-10 h-14 rounded-2xl bg-muted/30 border-border/30 text-base"
+              placeholder={t('search.placeholder')}
+              className="pl-12 pr-10 h-12 rounded-2xl bg-muted/30 border-border/30 text-base"
             />
             {query && (
               <button
@@ -176,7 +186,7 @@ export default function SearchPage() {
           <div className="space-y-3 animate-fade-in">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-accent" />
-              <h2 className="text-sm font-bold text-muted-foreground">Popüler Aramalar</h2>
+              <h2 className="text-sm font-bold text-muted-foreground">{t('search.popularSearches')}</h2>
             </div>
             <div className="flex flex-wrap gap-2">
               {popularSearches.map((search, index) => (
@@ -195,13 +205,13 @@ export default function SearchPage() {
 
         {/* Category Filters */}
         <div className="space-y-3">
-          <h2 className="text-sm font-bold text-muted-foreground">Kategoriler</h2>
+          <h2 className="text-sm font-bold text-muted-foreground">{t('home.categories')}</h2>
           <div className="flex flex-wrap gap-2">
             {categories.map((cat) => (
               <CategoryPill
                 key={cat.id}
                 emoji={cat.emoji}
-                name={cat.name}
+                name={t(`categories.${cat.name}`)}
                 isActive={selectedCategories.includes(cat.name)}
                 onClick={() => toggleCategory(cat.name)}
               />
@@ -213,10 +223,10 @@ export default function SearchPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-foreground">
-              {query || selectedCategories.length > 0 ? "Sonuçlar" : "Tüm Paketler"}
+              {query || selectedCategories.length > 0 ? t('search.results') : t('search.allPacks')}
             </h2>
             <span className="text-sm text-muted-foreground px-3 py-1 rounded-full bg-muted/30">
-              {filteredPacks.length} paket
+              {filteredPacks.length} {t('packDetail.stickers').toLowerCase()}
             </span>
           </div>
 
@@ -232,7 +242,12 @@ export default function SearchPage() {
                   className="animate-fade-in"
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
-                  <PackCard pack={pack} />
+                  <PackCard
+                    pack={pack}
+                    index={index}
+                    isLiked={likedPackIds.has(pack.id)}
+                    onLike={handleLike}
+                  />
                 </div>
               ))}
 

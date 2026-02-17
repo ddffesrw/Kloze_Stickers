@@ -28,7 +28,8 @@ export async function generateStickerDalle(prompt: string): Promise<{ imageURL: 
     try {
         console.log("[DALL-E] Generating with prompt:", prompt);
 
-        const enhancedPrompt = `A high quality sticker of ${prompt}, die-cut, white border, vector art style, flat design, minimal shading, white background`;
+        // Prompt already enhanced by GeneratePage (translation + style + sticker keywords)
+        const enhancedPrompt = prompt;
 
         const response = await client.images.generate({
             model: "dall-e-3",

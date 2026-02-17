@@ -1,5 +1,4 @@
 import { Crown, Play, Coins, X, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
     AlertDialog,
     AlertDialogContent,
@@ -8,11 +7,12 @@ import {
     AlertDialogDescription,
 } from "@/components/ui/alert-dialog";
 import { useState } from "react";
-import { AdMob, RewardAdPluginEvents, AdMobRewardItem } from "@capacitor-community/admob";
-import { Capacitor } from "@capacitor/core";
+import { adMobService } from "@/services/adMobService";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { getGuestCredits, setGuestCredits } from "@/components/kloze/WatchAdButton";
 
 interface NoCreditModalProps {
     isOpen: boolean;
@@ -31,51 +31,45 @@ export function NoCreditModal({
 }: NoCreditModalProps) {
     const navigate = useNavigate();
     const [isWatchingAd, setIsWatchingAd] = useState(false);
+    const { userId, credits, setCreditsLocal, refreshCredits } = useAuth();
 
     const handleWatchAd = async () => {
-        if (!Capacitor.isNativePlatform()) {
-            toast.error("Reklamlar sadece mobil uygulamada çalışır");
-            return;
-        }
-
         setIsWatchingAd(true);
 
         try {
-            // Prepare reward ad
-            await AdMob.prepareRewardVideoAd({
-                adId: import.meta.env.VITE_ADMOB_REWARD_ID || 'ca-app-pub-3940256099942544/5224354917'
-            });
+            const reward = await adMobService.showRewardVideo();
 
-            // Listen for reward
-            const rewardListener = await AdMob.addListener(
-                RewardAdPluginEvents.Rewarded,
-                async (reward: AdMobRewardItem) => {
-                    console.log('Reward received:', reward);
+            if (reward) {
+                if (userId) {
+                    // Logged-in user
+                    const { error } = await supabase.rpc('add_credits', {
+                        user_id: userId,
+                        amount: 1
+                    });
 
-                    // Add credit via RPC
-                    const { data: { user } } = await supabase.auth.getUser();
-                    if (user) {
-                        await supabase.rpc('add_credits', { user_id: user.id, amount: 1 });
+                    if (!error) {
+                        setCreditsLocal(credits + 1);
+                        toast.success("🎉 1 Kredi kazandın!");
+                        onCreditsEarned?.();
+                        onClose();
+                        refreshCredits();
+                    } else {
+                        console.error("Credit add error:", error);
+                        toast.error("Kredi eklenemedi, tekrar dene");
                     }
-
+                } else {
+                    // Guest user
+                    const current = getGuestCredits();
+                    setGuestCredits(current + 1);
+                    setCreditsLocal(current + 1);
+                    window.dispatchEvent(new Event('guest-credits-updated'));
                     toast.success("🎉 1 Kredi kazandın!");
                     onCreditsEarned?.();
                     onClose();
                 }
-            );
-
-            // Cleanup listener when ad is dismissed (not arbitrary timeout)
-            const dismissListener = await AdMob.addListener(
-                RewardAdPluginEvents.Dismissed,
-                () => {
-                    rewardListener.remove();
-                    dismissListener.remove();
-                }
-            );
-
-            // Show ad
-            await AdMob.showRewardVideoAd();
-
+            } else {
+                toast.info("Reklam tamamlanmadı, tekrar deneyin");
+            }
         } catch (error) {
             console.error('Ad error:', error);
             toast.error("Reklam yüklenemedi. Daha sonra tekrar deneyin.");

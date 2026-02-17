@@ -1,0 +1,287 @@
+{
+  "common": {
+    "appName": "KLOZE",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "save": "Save",
+    "share": "Share",
+    "download": "Download",
+    "close": "Close",
+    "search": "Search",
+    "filter": "Filter",
+    "all": "All",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "navigation": {
+    "home": "Home",
+    "discover": "Discover",
+    "search": "Search",
+    "generate": "Generate",
+    "profile": "Profile",
+    "settings": "Settings",
+    "credits": "Credits"
+  },
+  "categories": {
+    "Eğlence": "Fun",
+    "Hayvanlar": "Animals",
+    "Aşk": "Love",
+    "Gaming": "Gaming",
+    "Anime": "Anime",
+    "Meme": "Meme",
+    "Müzik": "Music",
+    "Spor": "Sports",
+    "Sanat": "Art",
+    "Psychedelic": "Psychedelic",
+    "Animated": "Animated"
+  },
+  "home": {
+    "trending": "Trending",
+    "new": "New",
+    "categories": "Categories",
+    "allCategories": "All Categories",
+    "loadingMore": "Loading...",
+    "noMorePacks": "No more packs",
+    "heroBanner": {
+      "aiGeneration": {
+        "title": "AI-Powered Sticker Creation",
+        "subtitle": "Unleash your creativity, create unique stickers with artificial intelligence"
+      },
+      "whatsapp": {
+        "title": "Add to WhatsApp Instantly",
+        "subtitle": "Upload sticker packs to your WhatsApp with one click, start using right away"
+      },
+      "bgRemoval": {
+        "title": "Professional Background Removal",
+        "subtitle": "Perfect cutout with AI technology, professional results with one touch"
+      },
+      "premium": {
+        "title": "Premium Experience",
+        "subtitle": "Go Pro with unlimited generation, ad-free usage and exclusive privileges"
+      },
+      "library": {
+        "title": "Thousands of Ready Stickers",
+        "subtitle": "Explore the constantly updated sticker collection, download now"
+      }
+    }
+  },
+  "packDetail": {
+    "addToWhatsApp": "Add to WhatsApp",
+    "addedToWhatsApp": "Added to WhatsApp",
+    "creator": "Creator",
+    "stickers": "Stickers",
+    "downloads": "Downloads",
+    "likes": "Likes",
+    "shareTitle": "Share Pack",
+    "shareText": "Discover {{title}} sticker pack on Kloze app!",
+    "reportContent": "Report Content",
+    "blockUser": "Block User",
+    "blockUserConfirm": "Are you sure you want to block this user?",
+    "userBlocked": "User blocked",
+    "premiumOnly": "This pack is exclusive to our PRO members",
+    "noCreditTitle": "Credit Required",
+    "noCreditMessage": "You need 1 credit to add this pack to WhatsApp.",
+    "watchAd": "Watch Ad",
+    "buyCredits": "Buy Credits",
+    "goPro": "Go PRO"
+  },
+  "generate": {
+    "title": "Generate AI Sticker",
+    "prompt": "What do you imagine?",
+    "promptPlaceholder": "E.g: A smiling cat, a running dog...",
+    "style": "Style",
+    "styles": {
+      "cartoon": "Cartoon",
+      "realistic": "Realistic",
+      "anime": "Anime",
+      "abstract": "Abstract"
+    },
+    "generate": "Generate",
+    "generating": "Generating...",
+    "creditRequired": "{{count}} credit required",
+    "noCredit": "Out of credits",
+    "generatedStickers": "Generated Stickers",
+    "createPack": "Create Pack",
+    "addToExisting": "Add to Existing Pack",
+    "saveToGallery": "Save to Gallery"
+  },
+  "profile": {
+    "myPacks": "My Packs",
+    "myStickers": "My Stickers",
+    "allMyStickers": "All My Stickers",
+    "likedPacks": "Liked",
+    "stats": {
+      "totalPacks": "Total Packs",
+      "totalStickers": "Total Stickers",
+      "totalDownloads": "Total Downloads",
+      "totalLikes": "Total Likes",
+      "generated": "Generated",
+      "downloads": "Downloads",
+      "likesReceived": "Likes Received",
+      "favorites": "Favorites"
+    },
+    "editProfile": "Edit Profile",
+    "editAvatar": "Change Avatar",
+    "username": "Username",
+    "bio": "Bio",
+    "bioPlaceholder": "Introduce yourself...",
+    "logout": "Logout",
+    "loginRequired": "Login Required",
+    "loginMessage": "Please login to use profile features",
+    "loading": "Loading profile...",
+    "selectStickers": "Select stickers",
+    "selectedCount": "selected",
+    "addToPack": "Add to Pack",
+    "createNewPack": "Create New Pack",
+    "deletePack": "Delete Pack",
+    "deleteStickers": "Delete Selected",
+    "cancel": "Cancel",
+    "packName": "Pack Name",
+    "packNamePlaceholder": "Enter pack name...",
+    "create": "Create",
+    "creating": "Creating...",
+    "selectPack": "Select Pack",
+    "noPacks": "No packs yet",
+    "noStickers": "No stickers yet"
+  },
+  "search": {
+    "placeholder": "Search sticker packs...",
+    "popularSearches": "Popular Searches",
+    "results": "Results",
+    "allPacks": "All Packs",
+    "noResults": "No results found",
+    "tryDifferent": "Try a different search"
+  },
+  "credits": {
+    "title": "Credits",
+    "yourCredits": "Your Credits",
+    "watchAd": "Watch Ad",
+    "watchAdDesc": "Earn free +1 credit",
+    "watching": "Watching ad...",
+    "completed": "Completed!",
+    "waitTime": "Wait {{seconds}} seconds",
+    "buyCredits": "Buy Credits",
+    "viewPackages": "View packages",
+    "goPro": "Go PRO",
+    "goProDesc": "Unlimited generation + Ad-free",
+    "unlimitedGeneration": "You have unlimited generation!",
+    "popular": "POPULAR",
+    "packages": {
+      "starter": "Starter",
+      "popular": "Popular",
+      "best": "Best Value",
+      "credits": "{{count}} Credits"
+    }
+  },
+  "dailyBonus": {
+    "title": "Daily Bonus!",
+    "congratulations": "Congratulations! 🎉",
+    "claimBonus": "Claim Bonus",
+    "claimed": "Claimed! ✓",
+    "comeTomorrow": "Come Tomorrow",
+    "creditsAdded": "+{{count}} credits added to your account!",
+    "canClaim": "Ready to claim your daily bonus!",
+    "alreadyClaimed": "You've already claimed today's bonus",
+    "comeBackTomorrow": "Come back tomorrow!",
+    "streak": "Streak: {{count}} days",
+    "todayBonus": "Today's Bonus",
+    "streakLevels": {
+      "newbie": "🔥 Newbie",
+      "warming": "💪 Warming Up",
+      "onFire": "🔥 On Fire",
+      "legend": "👑 Legend"
+    }
+  },
+  "review": {
+    "title": "Love KLOZE? 💕",
+    "description": "Your rating makes us happy and helps other users!",
+    "rateOnStore": "Rate on Play Store",
+    "thankYou": "Thank You!",
+    "selectStar": "Select Star",
+    "later": "Later",
+    "feedback": {
+      "5": "Awesome! 🎉",
+      "4": "Great! 😊",
+      "3": "Not bad 🙂",
+      "2": "We can improve 🤔",
+      "1": "We're sorry 😔"
+    }
+  },
+  "report": {
+    "title": "Report Content",
+    "selectReason": "Select a reason",
+    "reasons": {
+      "inappropriate": "Inappropriate Content",
+      "spam": "Spam or Misleading",
+      "copyright": "Copyright Violation",
+      "offensive": "Offensive or Hate Speech",
+      "other": "Other"
+    },
+    "additionalInfo": "Additional Info (Optional)",
+    "additionalInfoPlaceholder": "Please detail the issue...",
+    "submit": "Submit",
+    "submitting": "Submitting...",
+    "success": "Your report has been received. We'll review it.",
+    "error": "Failed to submit report. Please try again."
+  },
+  "settings": {
+    "title": "Settings",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "themes": {
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "language": "Language",
+    "languages": {
+      "tr": "Türkçe",
+      "en": "English"
+    },
+    "notifications": "Notifications",
+    "notificationsDesc": "New packs and updates",
+    "account": "Account",
+    "privacy": "Privacy",
+    "terms": "Terms of Service",
+    "about": "About",
+    "version": "Version"
+  },
+  "auth": {
+    "login": "Login",
+    "signup": "Sign Up",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot Password",
+    "continueAsGuest": "Continue as Guest",
+    "or": "or",
+    "loginWith": "Login with {{provider}}",
+    "alreadyHaveAccount": "Already have an account?",
+    "dontHaveAccount": "Don't have an account?",
+    "loginSuccess": "Successfully logged in!",
+    "loginError": "Login failed",
+    "signupSuccess": "Successfully signed up!",
+    "signupError": "Sign up failed"
+  },
+  "errors": {
+    "generic": "Something went wrong",
+    "network": "Check your internet connection",
+    "notFound": "Not found",
+    "unauthorized": "Unauthorized",
+    "serverError": "Server error"
+  },
+  "notifications": {
+    "creditEarned": "+{{count}} Credit earned!",
+    "packAdded": "Pack added to WhatsApp!",
+    "packCreated": "Pack created!",
+    "stickerSaved": "Sticker saved!",
+    "linkCopied": "Link copied!",
+    "saved": "Saved!",
+    "deleted": "Deleted!",
+    "updated": "Updated!"
+  }
+}

@@ -4,10 +4,15 @@ import { PackCard } from "@/components/kloze/PackCard";
 import { Input } from "@/components/ui/input";
 import { Search, Flame, Clock, Trophy, Crown, Loader2, Heart, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { getProLeaderboard, type LeaderboardEntry } from "@/services/stickerPackService";
+import { getProLeaderboard, type LeaderboardEntry, getUserLikedPackIds } from "@/services/stickerPackService";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { usePackInteractions } from "@/hooks/usePackInteractions";
+import { useScrollRestoration } from "@/hooks/useScrollRestoration";
 
 export default function DiscoverPage() {
+    useScrollRestoration();
+    const { userId } = useAuth();
     const [searchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState<'trending' | 'new' | 'pro'>('trending');
     const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
@@ -15,10 +20,19 @@ export default function DiscoverPage() {
     const [loading, setLoading] = useState(true);
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
 
+    // Centralized pack interactions
+    const { likedPackIds, setLikedPacks, handleLike, isLiked } = usePackInteractions(userId);
+
     useEffect(() => {
         fetchPacks();
         fetchLeaderboard();
     }, [activeTab]);
+
+    useEffect(() => {
+        if (userId) {
+            getUserLikedPackIds(userId).then(setLikedPacks);
+        }
+    }, [userId, setLikedPacks]);
 
     const fetchLeaderboard = async () => {
         const data = await getProLeaderboard();
@@ -169,7 +183,12 @@ export default function DiscoverPage() {
                 {/* Packs Grid */}
                 <section className="grid grid-cols-2 gap-4 pb-20">
                     {packs.map(pack => (
-                        <PackCard key={pack.id} pack={pack} />
+                        <PackCard
+                            key={pack.id}
+                            pack={pack}
+                            isLiked={isLiked(pack.id)}
+                            onLike={(packId) => handleLike(packId, setPacks)}
+                        />
                     ))}
 
                     {!loading && packs.length === 0 && (

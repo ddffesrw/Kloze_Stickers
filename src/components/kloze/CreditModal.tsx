@@ -7,6 +7,8 @@ import { adMobService } from "@/services/adMobService";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
+import { getGuestCredits, setGuestCredits } from "@/components/kloze/WatchAdButton";
 
 interface CreditModalProps {
   open: boolean;
@@ -19,6 +21,7 @@ export function CreditModal({ open, onOpenChange, currentCredits, isPro = false 
   const navigate = useNavigate();
   const [watchingAd, setWatchingAd] = useState(false);
   const [adCooldown, setAdCooldown] = useState(false);
+  const { userId, credits, setCreditsLocal, refreshCredits } = useAuth();
 
   const handleWatchAd = async () => {
     if (watchingAd || adCooldown) return;
@@ -28,23 +31,38 @@ export function CreditModal({ open, onOpenChange, currentCredits, isPro = false 
       const reward = await adMobService.showRewardVideo();
 
       if (reward) {
-        // Kredi ekle
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
+        if (userId) {
+          // Logged-in user
           const { error } = await supabase.rpc('add_credits', {
-            user_id: user.id,
+            user_id: userId,
             amount: 1
           });
 
           if (!error) {
+            setCreditsLocal(credits + 1);
             toast.success("+1 Kredi kazandın!", {
               icon: <Gift className="w-5 h-5 text-green-500" />,
             });
-            // Cooldown başlat (30 saniye)
             setAdCooldown(true);
             setTimeout(() => setAdCooldown(false), 30000);
+            refreshCredits();
+          } else {
+            toast.error("Kredi eklenemedi, tekrar dene");
           }
+        } else {
+          // Guest user
+          const current = getGuestCredits();
+          setGuestCredits(current + 1);
+          setCreditsLocal(current + 1);
+          window.dispatchEvent(new Event('guest-credits-updated'));
+          toast.success("+1 Kredi kazandın!", {
+            icon: <Gift className="w-5 h-5 text-green-500" />,
+          });
+          setAdCooldown(true);
+          setTimeout(() => setAdCooldown(false), 30000);
         }
+      } else {
+        toast.info("Reklam tamamlanmadı, tekrar deneyin");
       }
     } catch (e) {
       console.error("Ad error:", e);
@@ -66,7 +84,7 @@ export function CreditModal({ open, onOpenChange, currentCredits, isPro = false 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm bg-zinc-950/95 backdrop-blur-xl border-zinc-800/50 text-white p-0 overflow-hidden">
+      <DialogContent className="sm:max-w-sm bg-background/95 backdrop-blur-xl border-border/50 p-0 overflow-hidden">
         {/* Header with gradient */}
         <div className="relative px-6 pt-6 pb-4">
           <div className="absolute inset-0 bg-gradient-to-b from-amber-500/10 to-transparent" />
@@ -83,7 +101,7 @@ export function CreditModal({ open, onOpenChange, currentCredits, isPro = false 
                 </span>
               ) : (
                 <>
-                  <span className="text-white">Kredilerin: </span>
+                  <span className="text-foreground">Kredilerin: </span>
                   <span className="bg-gradient-to-r from-amber-400 to-yellow-300 bg-clip-text text-transparent">
                     {currentCredits}
                   </span>
@@ -128,10 +146,10 @@ export function CreditModal({ open, onOpenChange, currentCredits, isPro = false 
                 )}
               </div>
               <div className="flex-1 text-left">
-                <p className="font-bold text-white">
+                <p className="font-bold text-foreground">
                   {watchingAd ? "Reklam izleniyor..." : adCooldown ? "Tamamlandı!" : "Reklam İzle"}
                 </p>
-                <p className="text-xs text-zinc-400">
+                <p className="text-xs text-muted-foreground">
                   {adCooldown ? "30 saniye bekle" : "Ücretsiz +1 kredi kazan"}
                 </p>
               </div>
@@ -159,8 +177,8 @@ export function CreditModal({ open, onOpenChange, currentCredits, isPro = false 
               <ShoppingCart className="w-5 h-5 text-white" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-bold text-white">Kredi Satın Al</p>
-              <p className="text-xs text-zinc-400">Paketleri görüntüle</p>
+              <p className="font-bold text-foreground">Kredi Satın Al</p>
+              <p className="text-xs text-muted-foreground">Paketleri görüntüle</p>
             </div>
             <Sparkles className="w-5 h-5 text-violet-400 group-hover:animate-pulse" />
           </button>
@@ -188,7 +206,7 @@ export function CreditModal({ open, onOpenChange, currentCredits, isPro = false 
                 <p className="font-bold bg-gradient-to-r from-amber-400 to-yellow-300 bg-clip-text text-transparent">
                   PRO'ya Geç
                 </p>
-                <p className="text-xs text-zinc-400">Sınırsız üretim + Reklamsız</p>
+                <p className="text-xs text-muted-foreground">Sınırsız üretim + Reklamsız</p>
               </div>
               <div className="px-2 py-1 rounded-full bg-amber-500/30">
                 <span className="text-[10px] font-bold text-amber-300">POPÜLER</span>

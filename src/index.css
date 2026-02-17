@@ -6,40 +6,39 @@
 
 @layer base {
   :root {
-    /* Deep space black */
-    --background: 250 20% 3%;
-    --foreground: 0 0% 98%;
+    /* Light Mode - Clean & Bright */
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
 
-    /* Rich dark cards */
-    --card: 250 20% 7%;
-    --card-foreground: 0 0% 98%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
 
-    --popover: 250 20% 7%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
 
     /* Electric Violet - Primary */
     --primary: 265 100% 66%;
     --primary-foreground: 0 0% 100%;
 
-    /* Neon Cyan - Secondary */
-    --secondary: 175 100% 50%;
-    --secondary-foreground: 250 20% 5%;
+    /* Cyan - Secondary */
+    --secondary: 175 80% 45%;
+    --secondary-foreground: 0 0% 100%;
 
-    /* Muted tones */
-    --muted: 250 15% 14%;
-    --muted-foreground: 250 10% 55%;
+    /* Muted light */
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
 
-    /* Hot Pink Accent */
-    --accent: 330 100% 65%;
+    /* Pink Accent */
+    --accent: 330 90% 60%;
     --accent-foreground: 0 0% 100%;
 
     /* Destructive */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
 
-    /* Subtle borders */
-    --border: 250 15% 18%;
-    --input: 250 15% 14%;
+    /* Light borders */
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
     --ring: 265 100% 66%;
 
     --radius: 1rem;
@@ -51,13 +50,13 @@
     --glow-gold: 45 100% 55%;
 
     /* Sidebar */
-    --sidebar-background: 250 20% 5%;
-    --sidebar-foreground: 0 0% 98%;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 265 100% 66%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 250 20% 12%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 250 15% 18%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 240 5.9% 90%;
     --sidebar-ring: 265 100% 66%;
   }
 
@@ -398,5 +397,39 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Performance optimizations for low-end devices */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-float-delayed,
+  .animate-float-slow,
+  .animate-pulse-glow,
+  .animate-gradient-rainbow {
+    animation: none !important;
+  }
+
+  .mesh-gradient,
+  .mesh-gradient-intense {
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.1), hsl(var(--secondary) / 0.1)) !important;
+  }
+
+  .glow-violet,
+  .glow-cyan,
+  .glow-pink {
+    box-shadow: none !important;
+  }
+}
+
+/* Disable heavy animations on devices with 4 or fewer CPU cores */
+@media (max-resolution: 1.5dppx) {
+  .animate-float,
+  .animate-pulse-glow {
+    animation-duration: 8s; /* Slower animations = less CPU */
+  }
+
+  .mesh-gradient-intense {
+    opacity: 0.3; /* Reduce opacity to lighten GPU load */
   }
 }

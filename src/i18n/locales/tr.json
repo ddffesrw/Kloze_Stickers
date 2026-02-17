@@ -1,0 +1,287 @@
+{
+  "common": {
+    "appName": "KLOZE",
+    "loading": "Yükleniyor...",
+    "error": "Hata",
+    "success": "Başarılı",
+    "cancel": "İptal",
+    "confirm": "Onayla",
+    "delete": "Sil",
+    "edit": "Düzenle",
+    "save": "Kaydet",
+    "share": "Paylaş",
+    "download": "İndir",
+    "close": "Kapat",
+    "search": "Ara",
+    "filter": "Filtrele",
+    "all": "Tümü",
+    "yes": "Evet",
+    "no": "Hayır"
+  },
+  "navigation": {
+    "home": "Ana Sayfa",
+    "discover": "Keşfet",
+    "search": "Ara",
+    "generate": "Üret",
+    "profile": "Profil",
+    "settings": "Ayarlar",
+    "credits": "Krediler"
+  },
+  "categories": {
+    "Eğlence": "Eğlence",
+    "Hayvanlar": "Hayvanlar",
+    "Aşk": "Aşk",
+    "Gaming": "Gaming",
+    "Anime": "Anime",
+    "Meme": "Meme",
+    "Müzik": "Müzik",
+    "Spor": "Spor",
+    "Sanat": "Sanat",
+    "Psychedelic": "Psychedelic",
+    "Animated": "Animated"
+  },
+  "home": {
+    "trending": "Trend",
+    "new": "Yeni",
+    "categories": "Kategoriler",
+    "allCategories": "Tüm Kategoriler",
+    "loadingMore": "Yükleniyor...",
+    "noMorePacks": "Daha fazla paket yok",
+    "heroBanner": {
+      "aiGeneration": {
+        "title": "AI Güçlü Sticker Üretimi",
+        "subtitle": "Yaratıcılığını serbest bırak, yapay zeka ile benzersiz sticker'lar oluştur"
+      },
+      "whatsapp": {
+        "title": "Anında WhatsApp'a Ekle",
+        "subtitle": "Tek tıkla sticker paketlerini WhatsApp'ına yükle, hemen kullanmaya başla"
+      },
+      "bgRemoval": {
+        "title": "Profesyonel Arka Plan Silme",
+        "subtitle": "AI teknolojisi ile kusursuz kesim, tek dokunuşla profesyonel sonuç"
+      },
+      "premium": {
+        "title": "Premium Deneyim",
+        "subtitle": "Sınırsız üretim, reklamsız kullanım ve özel ayrıcalıklarla Pro ol"
+      },
+      "library": {
+        "title": "Binlerce Hazır Sticker",
+        "subtitle": "Sürekli güncellenen sticker koleksiyonunu keşfet, hemen indir"
+      }
+    }
+  },
+  "packDetail": {
+    "addToWhatsApp": "WhatsApp'a Ekle",
+    "addedToWhatsApp": "WhatsApp'a Eklendi",
+    "creator": "Oluşturan",
+    "stickers": "Sticker",
+    "downloads": "İndirme",
+    "likes": "Beğeni",
+    "shareTitle": "Paketi Paylaş",
+    "shareText": "Kloze uygulamasında {{title}} sticker paketini keşfet!",
+    "reportContent": "İçeriği Rapor Et",
+    "blockUser": "Kullanıcıyı Engelle",
+    "blockUserConfirm": "Bu kullanıcıyı engellemek istediğinize emin misiniz?",
+    "userBlocked": "Kullanıcı engellendi",
+    "premiumOnly": "Bu paket PRO üyelerimize özeldir",
+    "noCreditTitle": "Kredi Gerekli",
+    "noCreditMessage": "Bu paketi WhatsApp'a eklemek için 1 kredi gerekiyor.",
+    "watchAd": "Reklam İzle",
+    "buyCredits": "Kredi Satın Al",
+    "goPro": "PRO'ya Geç"
+  },
+  "generate": {
+    "title": "AI Sticker Üret",
+    "prompt": "Ne hayal ediyorsun?",
+    "promptPlaceholder": "Örn: Gülümseyen bir kedi, koşan bir köpek...",
+    "style": "Stil",
+    "styles": {
+      "cartoon": "Karikatür",
+      "realistic": "Gerçekçi",
+      "anime": "Anime",
+      "abstract": "Soyut"
+    },
+    "generate": "Üret",
+    "generating": "Üretiliyor...",
+    "creditRequired": "{{count}} kredi gerekiyor",
+    "noCredit": "Kredini bitti",
+    "generatedStickers": "Üretilen Stickerlar",
+    "createPack": "Paket Oluştur",
+    "addToExisting": "Mevcut Pakete Ekle",
+    "saveToGallery": "Galeriye Kaydet"
+  },
+  "profile": {
+    "myPacks": "Paketlerim",
+    "myStickers": "Stickerlarım",
+    "allMyStickers": "Tüm Stickerlarım",
+    "likedPacks": "Beğendiklerim",
+    "stats": {
+      "totalPacks": "Toplam Paket",
+      "totalStickers": "Toplam Sticker",
+      "totalDownloads": "Toplam İndirme",
+      "totalLikes": "Toplam Beğeni",
+      "generated": "Üretilen",
+      "downloads": "İndirme",
+      "likesReceived": "Alınan Beğeni",
+      "favorites": "Favoriler"
+    },
+    "editProfile": "Profili Düzenle",
+    "editAvatar": "Avatar Değiştir",
+    "username": "Kullanıcı Adı",
+    "bio": "Biyografi",
+    "bioPlaceholder": "Kendini tanıt...",
+    "logout": "Çıkış Yap",
+    "loginRequired": "Giriş yapmanız gerekiyor",
+    "loginMessage": "Profil özelliklerini kullanmak için giriş yapın",
+    "loading": "Profil yükleniyor...",
+    "selectStickers": "Sticker seç",
+    "selectedCount": "seçildi",
+    "addToPack": "Pakete Ekle",
+    "createNewPack": "Yeni Paket Oluştur",
+    "deletePack": "Paketi Sil",
+    "deleteStickers": "Seçilenleri Sil",
+    "cancel": "İptal",
+    "packName": "Paket Adı",
+    "packNamePlaceholder": "Paket adı girin...",
+    "create": "Oluştur",
+    "creating": "Oluşturuluyor...",
+    "selectPack": "Paket Seç",
+    "noPacks": "Henüz paketiniz yok",
+    "noStickers": "Henüz sticker'ınız yok"
+  },
+  "search": {
+    "placeholder": "Sticker paketi ara...",
+    "popularSearches": "Popüler Aramalar",
+    "results": "Sonuçlar",
+    "allPacks": "Tüm Paketler",
+    "noResults": "Sonuç bulunamadı",
+    "tryDifferent": "Farklı bir arama deneyin"
+  },
+  "credits": {
+    "title": "Krediler",
+    "yourCredits": "Kredilerin",
+    "watchAd": "Reklam İzle",
+    "watchAdDesc": "Ücretsiz +1 kredi kazan",
+    "watching": "Reklam izleniyor...",
+    "completed": "Tamamlandı!",
+    "waitTime": "{{seconds}} saniye bekle",
+    "buyCredits": "Kredi Satın Al",
+    "viewPackages": "Paketleri görüntüle",
+    "goPro": "PRO'ya Geç",
+    "goProDesc": "Sınırsız üretim + Reklamsız",
+    "unlimitedGeneration": "Sınırsız üretim hakkın var!",
+    "popular": "POPÜLER",
+    "packages": {
+      "starter": "Başlangıç",
+      "popular": "Popüler",
+      "best": "En İyi Değer",
+      "credits": "{{count}} Kredi"
+    }
+  },
+  "dailyBonus": {
+    "title": "Günlük Bonus!",
+    "congratulations": "Tebrikler! 🎉",
+    "claimBonus": "Bonusu Al",
+    "claimed": "Aldın! ✓",
+    "comeTomorrow": "Yarın Gel",
+    "creditsAdded": "+{{count}} kredi hesabına eklendi!",
+    "canClaim": "Bugünkü bonusunu almaya hazırsın!",
+    "alreadyClaimed": "Bugünkü bonusunu zaten aldın",
+    "comeBackTomorrow": "Yarın tekrar gel!",
+    "streak": "Seri: {{count}} gün",
+    "todayBonus": "Bugünkü Bonus",
+    "streakLevels": {
+      "newbie": "🔥 Yeni Başlayan",
+      "warming": "💪 Isınıyor",
+      "onFire": "🔥 Ateşli",
+      "legend": "👑 Efsane"
+    }
+  },
+  "review": {
+    "title": "KLOZE'u seviyor musun? 💕",
+    "description": "Uygulamamızı değerlendirmen bizi çok mutlu eder ve diğer kullanıcılara yardımcı olur!",
+    "rateOnStore": "Play Store'da Değerlendir",
+    "thankYou": "Teşekkürler!",
+    "selectStar": "Yıldız Seç",
+    "later": "Daha Sonra",
+    "feedback": {
+      "5": "Harika! 🎉",
+      "4": "Güzel! 😊",
+      "3": "Fena değil 🙂",
+      "2": "Geliştirebiliriz 🤔",
+      "1": "Üzgünüz 😔"
+    }
+  },
+  "report": {
+    "title": "İçeriği Rapor Et",
+    "selectReason": "Bir sebep seçin",
+    "reasons": {
+      "inappropriate": "Uygunsuz İçerik",
+      "spam": "Spam veya Yanıltıcı",
+      "copyright": "Telif Hakkı İhlali",
+      "offensive": "Saldırgan veya Nefret İçerikli",
+      "other": "Diğer"
+    },
+    "additionalInfo": "Ek Bilgi (Opsiyonel)",
+    "additionalInfoPlaceholder": "Lütfen sorunu detaylandırın...",
+    "submit": "Gönder",
+    "submitting": "Gönderiliyor...",
+    "success": "Raporunuz alındı. İnceleyeceğiz.",
+    "error": "Rapor gönderilemedi. Lütfen tekrar deneyin."
+  },
+  "settings": {
+    "title": "Ayarlar",
+    "appearance": "Görünüm",
+    "theme": "Tema",
+    "themes": {
+      "light": "Açık",
+      "dark": "Koyu",
+      "system": "Sistem"
+    },
+    "language": "Dil",
+    "languages": {
+      "tr": "Türkçe",
+      "en": "English"
+    },
+    "notifications": "Bildirimler",
+    "notificationsDesc": "Yeni paketler ve güncellemeler",
+    "account": "Hesap",
+    "privacy": "Gizlilik",
+    "terms": "Kullanım Koşulları",
+    "about": "Hakkında",
+    "version": "Sürüm"
+  },
+  "auth": {
+    "login": "Giriş Yap",
+    "signup": "Kayıt Ol",
+    "email": "E-posta",
+    "password": "Şifre",
+    "forgotPassword": "Şifremi Unuttum",
+    "continueAsGuest": "Misafir Olarak Devam Et",
+    "or": "veya",
+    "loginWith": "{{provider}} ile giriş yap",
+    "alreadyHaveAccount": "Zaten hesabın var mı?",
+    "dontHaveAccount": "Hesabın yok mu?",
+    "loginSuccess": "Başarıyla giriş yapıldı!",
+    "loginError": "Giriş yapılamadı",
+    "signupSuccess": "Başarıyla kayıt olundu!",
+    "signupError": "Kayıt olunamadı"
+  },
+  "errors": {
+    "generic": "Bir şeyler yanlış gitti",
+    "network": "İnternet bağlantınızı kontrol edin",
+    "notFound": "Bulunamadı",
+    "unauthorized": "Yetkiniz yok",
+    "serverError": "Sunucu hatası"
+  },
+  "notifications": {
+    "creditEarned": "+{{count}} Kredi kazandın!",
+    "packAdded": "Paket WhatsApp'a eklendi!",
+    "packCreated": "Paket oluşturuldu!",
+    "stickerSaved": "Sticker kaydedildi!",
+    "linkCopied": "Link kopyalandı!",
+    "saved": "Kaydedildi!",
+    "deleted": "Silindi!",
+    "updated": "Güncellendi!"
+  }
+}
