@@ -40,6 +40,8 @@ export function StickerCard({ src, alt = "Sticker", onClick, className, delay = 
         <img
           src={src}
           alt={alt}
+          loading="lazy"
+          decoding="async"
           className={cn(
             "w-full h-full object-contain transition-all duration-300",
             "sticker-style",

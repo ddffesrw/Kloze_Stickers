@@ -678,10 +678,11 @@ export default function ProfilePage() {
                   onClick={() => isSelectionMode && toggleSelection(sticker.id)}
                 >
                   <img
-                    src={sticker.image_url}
+                    src={sticker.thumbnail_url || sticker.image_url}
                     alt="Sticker"
                     className="w-full h-full object-contain"
                     loading="lazy"
+                    decoding="async"
                   />
 
                   {/* Selection Checkbox */}
@@ -927,8 +928,10 @@ export default function ProfilePage() {
                       {packEditStickers.map(sticker => (
                         <div key={sticker.id} className="relative group aspect-square">
                           <img
-                            src={sticker.image_url}
+                            src={sticker.thumbnail_url || sticker.image_url}
                             className="w-full h-full object-contain rounded-lg bg-background/50"
+                            loading="lazy"
+                            decoding="async"
                           />
                           <button
                             onClick={() => handleRemoveStickerFromPack(sticker.id)}
@@ -965,9 +968,11 @@ export default function ProfilePage() {
                       {availableStickers.map(sticker => (
                         <div key={sticker.id} className="relative group aspect-square">
                           <img
-                            src={sticker.image_url}
+                            src={sticker.thumbnail_url || sticker.image_url}
                             className="w-full h-full object-contain rounded-lg bg-background/50 cursor-pointer hover:ring-2 ring-primary transition-all"
                             onClick={() => handleAddStickerToEditingPack(sticker.id)}
+                            loading="lazy"
+                            decoding="async"
                           />
                           <div
                             className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-primary/20 rounded-lg cursor-pointer"

@@ -512,7 +512,7 @@ export default function PackDetailPage() {
             {pack.stickers.map((sticker: any, index: number) => (
               <StickerCard
                 key={sticker.id}
-                src={sticker.image_url}
+                src={sticker.thumbnail_url || sticker.image_url}
                 alt={`Sticker ${index + 1}`}
                 delay={index * 50}
                 onClick={() => console.log("Preview sticker", index)}

@@ -2035,7 +2035,7 @@ export default function AdminPage() {
                 <div className="grid grid-cols-4 gap-2 max-h-[300px] overflow-y-auto p-2 bg-muted/20 rounded-lg">
                   {editPackStickers.map((s) => (
                     <div key={s.id} className="relative aspect-square group rounded-md overflow-hidden bg-black/20">
-                      <img src={s.image_url} className="w-full h-full object-cover" />
+                      <img src={s.thumbnail_url || s.image_url} className="w-full h-full object-cover" loading="lazy" decoding="async" />
 
                       <div className="absolute top-1 right-1">
                         <Button
