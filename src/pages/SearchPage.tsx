@@ -135,16 +135,17 @@ export default function SearchPage() {
     <div className="min-h-screen bg-background pb-28 relative overflow-x-hidden">
       {/* Background - Removed for performance */}
 
-      {/* Header - Ana sayfa ile aynı stil */}
-      <header className="sticky top-0 z-40 glass-card border-b border-border/20">
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/10 pt-2 pb-4">
         <div className="flex items-center justify-between px-4 py-3">
           {/* Brand */}
           <div className="flex-shrink-0">
-            <h1 className="text-lg font-black gradient-text leading-none">KLOZE</h1>
-            <p className="text-[9px] text-muted-foreground font-medium tracking-widest uppercase">Stickers</p>
+            <h1 className="text-2xl font-black bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent tracking-tight">
+              Keşfet
+            </h1>
           </div>
 
-          {/* Right Actions - Simplified */}
+          {/* Right Actions */}
           <div className="flex items-center gap-2">
             {!isPro && (
               <WatchAdButton onCreditEarned={refreshCredits} />
@@ -154,46 +155,49 @@ export default function SearchPage() {
         </div>
 
         {/* Search Input */}
-        <div className="px-4 pb-3">
+        <div className="px-4 mt-1">
           <div className={cn(
-            "relative rounded-2xl transition-all duration-300",
-            isFocused && "ring-2 ring-primary/50"
+            "relative rounded-full transition-all duration-300",
+            isFocused ? "shadow-[0_0_0_2px_rgba(139,92,246,0.3)] shadow-primary/20" : "hover:shadow-md border border-border/40"
           )}>
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            <Search className={cn(
+              "absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors duration-300",
+              isFocused ? "text-primary" : "text-muted-foreground"
+            )} />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder={t('search.placeholder')}
-              className="pl-12 pr-10 h-12 rounded-2xl bg-muted/30 border-border/30 text-base"
+              placeholder={t('search.placeholder') || "Sticker paketi ara..."}
+              className="pl-11 pr-10 h-12 rounded-full bg-muted/10 border-none text-base shadow-inner text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
             />
             {query && (
               <button
                 onClick={() => setQuery("")}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-full bg-muted hover:bg-muted/80 transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-all"
               >
-                <X className="w-4 h-4 text-muted-foreground" />
+                <X className="w-4 h-4" />
               </button>
             )}
           </div>
         </div>
       </header>
 
-      <main className="relative z-10 p-4 space-y-6">
+      <main className="relative z-10 py-6 space-y-8">
         {/* Popular Searches */}
         {!query && selectedCategories.length === 0 && (
           <div className="space-y-3 animate-fade-in">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-accent" />
-              <h2 className="text-sm font-bold text-muted-foreground">{t('search.popularSearches')}</h2>
+            <div className="flex items-center gap-2 px-4">
+              <TrendingUp className="w-4 h-4 text-primary" />
+              <h2 className="text-sm font-bold text-foreground">Popüler Aramalar</h2>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex overflow-x-auto gap-2 px-4 pb-2 hide-scrollbar">
               {popularSearches.map((search, index) => (
                 <button
                   key={search}
                   onClick={() => setQuery(search)}
-                  className="px-4 py-2.5 rounded-2xl glass-card border border-border/30 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all hover:scale-105"
+                  className="flex-shrink-0 px-4 py-2 rounded-xl glass-card border border-border/30 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-all hover:-translate-y-0.5"
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
                   {search}
@@ -205,28 +209,29 @@ export default function SearchPage() {
 
         {/* Category Filters */}
         <div className="space-y-3">
-          <h2 className="text-sm font-bold text-muted-foreground">{t('home.categories')}</h2>
-          <div className="flex flex-wrap gap-2">
+          <h2 className="text-sm font-bold text-foreground px-4">Kategoriler</h2>
+          <div className="flex overflow-x-auto gap-3 px-4 pb-2 hide-scrollbar">
             {categories.map((cat) => (
-              <CategoryPill
-                key={cat.id}
-                emoji={cat.emoji}
-                name={t(`categories.${cat.name}`)}
-                isActive={selectedCategories.includes(cat.name)}
-                onClick={() => toggleCategory(cat.name)}
-              />
+              <div key={cat.id} className="flex-shrink-0">
+                <CategoryPill
+                  emoji={cat.emoji}
+                  name={t(`categories.${cat.name}`)}
+                  isActive={selectedCategories.includes(cat.name)}
+                  onClick={() => toggleCategory(cat.name)}
+                />
+              </div>
             ))}
           </div>
         </div>
 
         {/* Results */}
-        <div className="space-y-4">
+        <div className="space-y-4 px-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-foreground">
+            <h2 className="text-lg font-extrabold text-foreground">
               {query || selectedCategories.length > 0 ? t('search.results') : t('search.allPacks')}
             </h2>
-            <span className="text-sm text-muted-foreground px-3 py-1 rounded-full bg-muted/30">
-              {filteredPacks.length} {t('packDetail.stickers').toLowerCase()}
+            <span className="text-xs font-semibold text-muted-foreground px-3 py-1 rounded-md bg-muted/40">
+              {filteredPacks.length} paket
             </span>
           </div>
 
