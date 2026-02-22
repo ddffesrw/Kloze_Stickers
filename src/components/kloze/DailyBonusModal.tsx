@@ -29,7 +29,7 @@ export function DailyBonusModal({ userId, onClaim }: DailyBonusModalProps) {
   const [earnedCredits, setEarnedCredits] = useState(0);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [adWatched, setAdWatched] = useState(false);
-  const { credits, setCreditsLocal, refreshCredits: refreshAuthCredits } = useAuth();
+  const { credits, setCreditsLocal } = useAuth();
 
   useEffect(() => {
     if (!userId) return;
@@ -51,14 +51,14 @@ export function DailyBonusModal({ userId, onClaim }: DailyBonusModalProps) {
     setIsClaiming(true);
 
     try {
-      const result = await claimDailyBonus(userId);
+      // Pass cached bonusInfo to skip redundant DB query
+      const result = await claimDailyBonus(userId, bonusInfo || undefined);
 
       if (result.success) {
         setClaimed(true);
         setEarnedCredits(result.creditsEarned);
-        // Hemen lokal güncelle
+        // Lokal güncelle — refreshAuthCredits gereksiz DB çağrısı yapar, sadece lokal set yeterli
         setCreditsLocal(credits + result.creditsEarned);
-        refreshAuthCredits();
 
         toast.success(`+${result.creditsEarned} kredi kazandın! 🎉`);
         onClaim?.(result.creditsEarned);
@@ -90,9 +90,8 @@ export function DailyBonusModal({ userId, onClaim }: DailyBonusModalProps) {
         if (!error) {
           setAdWatched(true);
           setEarnedCredits(prev => prev + extraCredits);
-          // Hemen lokal güncelle
+          // Lokal güncelle — refreshAuthCredits gereksiz DB çağrısı yapar
           setCreditsLocal(credits + extraCredits);
-          refreshAuthCredits();
 
           toast.success(`+${extraCredits} bonus kredi kazandın! 🎬`);
           onClaim?.(extraCredits);

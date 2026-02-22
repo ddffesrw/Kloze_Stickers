@@ -961,3 +961,62 @@ export async function getPlatformStats(): Promise<PlatformStats> {
     };
   }
 }
+
+/**
+ * Get Daily Featured Pack
+ * Picks one featured pack per day using a deterministic day-based rotation.
+ * Falls back to most-downloaded pack if no featured packs exist.
+ */
+export async function getDailyFeaturedPack(): Promise<StickerPack | null> {
+  try {
+    const { data, error } = await supabase
+      .from('sticker_packs')
+      .select('*, user_stickers(*)')
+      .eq('is_featured', true)
+      .order('downloads', { ascending: false })
+      .limit(20);
+
+    if (error) throw error;
+
+    const packs = (data || []).map(mapPackWithStickers);
+    if (packs.length === 0) return null;
+
+    // Deterministic daily rotation: same pack for the whole day, changes at midnight
+    const dayIndex = Math.floor(Date.now() / 86_400_000); // days since epoch
+    const pack = packs[dayIndex % packs.length];
+    return pack;
+  } catch (e) {
+    console.error('getDailyFeaturedPack error:', e);
+    return null;
+  }
+}
+
+/**
+ * Get a random pack for the Mystery Box feature.
+ * Excludes the given packIds (e.g. already seen/owned).
+ */
+export async function getRandomPack(excludeIds: string[] = []): Promise<StickerPack | null> {
+  try {
+    // Fetch a pool of packs, then pick randomly on client to avoid needing DB random()
+    let query = supabase
+      .from('sticker_packs')
+      .select('*, user_stickers(*)')
+      .order('downloads', { ascending: false })
+      .limit(50);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const packs = (data || [])
+      .map(mapPackWithStickers)
+      .filter(p => !excludeIds.includes(p.id));
+
+    if (packs.length === 0) return null;
+
+    const randomIndex = Math.floor(Math.random() * packs.length);
+    return packs[randomIndex];
+  } catch (e) {
+    console.error('getRandomPack error:', e);
+    return null;
+  }
+}

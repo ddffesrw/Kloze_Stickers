@@ -5,26 +5,11 @@
  * 2. HuggingFace Inference API (may have CORS issues in browser)
  * 3. Gradio Space API (fallback)
  */
-
-// HF Space URL from env
-const HF_SPACE_URL = import.meta.env.VITE_HF_SPACE_URL || 'https://ddffesrw-sticker-processor.hf.space';
-const HF_TOKEN = import.meta.env.VITE_HUGGING_FACE_TOKEN || '';
+const VDS_API_URL = 'http://94.154.34.214:8000/api/v1/remove-bg';
 
 /**
- * Convert Blob to Base64
- */
-async function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
-/**
- * Arka planı sil (ÜCRETSİZ)
- * Optimized for Speed: HF API first (server-side), then local fallback.
+ * Arka planı sil (VDS API)
+ * Optimized for Speed and small APK size.
  */
 export async function removeBackground(input: string | Blob): Promise<Blob> {
   let imageBlob: Blob;
@@ -43,93 +28,35 @@ export async function removeBackground(input: string | Blob): Promise<Blob> {
     imageBlob = input;
   }
 
-  // ========== LOCAL @imgly WITH TIMEOUT (WASM can hang on mobile) ==========
   try {
-    console.log('[BackgroundService] 🎯 Using local @imgly...');
+    console.log('[BackgroundService] 🚀 VDS API kullanılıyor...');
 
-    const BG_REMOVAL_TIMEOUT_MS = 45000; // 45 seconds (WASM + model download can take time on first run)
-
-    const imageUrl = URL.createObjectURL(imageBlob);
-    try {
-      // Wrap EVERYTHING (dynamic import + processing) inside the timeout
-      let timeoutId: ReturnType<typeof setTimeout>;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('Background removal timeout (45s)')), BG_REMOVAL_TIMEOUT_MS);
-      });
-
-      const processingPromise = (async () => {
-        const { removeBackground: removeBackgroundImgly } = await import("@imgly/background-removal");
-        return removeBackgroundImgly(imageUrl, {
-          publicPath: '/imgly/', // Force usage of local assets (copied via vite-plugin-static-copy)
-          progress: (key, current, total) => {
-            console.log(`[BG] ${key}: ${Math.round((current / total) * 100)}%`);
-          },
-          debug: false,
-          model: 'isnet_fp16', // Fast FP16 model (smaller than quint8 for this lib)
-          output: {
-            format: 'image/png',
-            quality: 0.8, // Slightly reduce quality for speed
-          }
-        });
-      })();
-
-      const result = await Promise.race([processingPromise, timeoutPromise]);
-      clearTimeout(timeoutId!); // Clean up timer on success
-
-      console.log('[BackgroundService] ✅ Local @imgly succeeded');
-      return result;
-    } finally {
-      URL.revokeObjectURL(imageUrl);
-    }
-  } catch (localError) {
-    console.warn('[BackgroundService] ⚠️ Local @imgly failed:', localError);
-  }
-
-  // ========== METHOD 3: Gradio Space API (Last Resort) ==========
-  try {
-    console.log('[BackgroundService] Trying Gradio Space API...');
-
-    const base64Image = await blobToBase64(imageBlob);
+    // FormData ile görseli API'ye gönderiyoruz
+    const formData = new FormData();
+    formData.append('image', imageBlob, 'image.jpg');
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout for API
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-    const response = await fetch(`${HF_SPACE_URL}/api/predict`, {
+    const response = await fetch(VDS_API_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        data: [base64Image]
-      }),
+      body: formData,
       signal: controller.signal
     });
 
     clearTimeout(timeoutId);
 
     if (response.ok) {
-      const result = await response.json();
-      if (result.data && result.data[0]) {
-        const base64Result = result.data[0];
-        const base64Data = base64Result.split(',')[1] || base64Result;
-        const binaryString = atob(base64Data);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        console.log('[BackgroundService] ✅ Gradio Space API succeeded');
-        return new Blob([bytes], { type: 'image/png' });
-      }
+      console.log('[BackgroundService] ✅ VDS API başarılı');
+      return await response.blob(); // API returns PNG blob directly
+    } else {
+      console.error('[BackgroundService] VDS API hatası:', response.statusText);
+      throw new Error(`API Hatası: ${response.status}`);
     }
-
-    console.warn('[BackgroundService] Gradio Space API failed');
-  } catch (gradioError) {
-    console.warn('[BackgroundService] ⚠️ Gradio Space error:', gradioError);
+  } catch (error) {
+    console.error('[BackgroundService] ❌ VDS API işlemi başarısız:', error);
+    throw new Error('Arka plan silme başarısız oldu. Lütfen tekrar deneyin.');
   }
-
-  // All methods failed - throw so caller knows it failed
-  console.error('[BackgroundService] ❌ All methods failed');
-  throw new Error('Arka plan silme başarısız oldu. Orijinal görsel kullanılacak.');
 }
 
 /**

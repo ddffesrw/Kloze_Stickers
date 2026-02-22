@@ -114,9 +114,5 @@
 # ==========================================
 # REMOVE LOGGING IN RELEASE
 # ==========================================
--assumenosideeffects class android.util.Log {
-    public static boolean isLoggable(java.lang.String, int);
-    public static int v(...);
-    public static int d(...);
-    public static int i(...);
-}
+# NOTE: -assumenosideeffects can cause crashes with R8; using safer approach
+-dontwarn android.util.Log

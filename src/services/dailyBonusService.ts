@@ -101,49 +101,66 @@ function calculateBonus(streakDay: number): number {
 
 /**
  * Claim daily bonus
+ * Optimized: uses cached bonusInfo to skip redundant DB check
  */
-export async function claimDailyBonus(userId: string): Promise<ClaimResult> {
+export async function claimDailyBonus(userId: string, cachedBonusInfo?: DailyBonusResult): Promise<ClaimResult> {
   try {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    // Single query for existing record
-    const { data: existing } = await supabase
-      .from('daily_logins')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-
-    // Check if already claimed today
-    if (existing) {
-      const lastClaim = new Date(existing.last_claim_date);
-      const lastClaimDay = new Date(lastClaim.getFullYear(), lastClaim.getMonth(), lastClaim.getDate());
-      if (lastClaimDay.getTime() === todayStart.getTime()) {
-        return { success: false, creditsEarned: 0, newStreak: existing.streak_days || 1, totalCredits: 0 };
-      }
+    // If we have cached info and can't claim, return early without any DB call
+    if (cachedBonusInfo && !cachedBonusInfo.canClaim) {
+      return { success: false, creditsEarned: 0, newStreak: cachedBonusInfo.streakDays, totalCredits: 0 };
     }
 
-    // Calculate streak
+    // Calculate streak from cached info if available, otherwise fetch
     let newStreak = 1;
-    if (existing) {
-      const lastClaim = new Date(existing.last_claim_date);
-      const lastClaimDay = new Date(lastClaim.getFullYear(), lastClaim.getMonth(), lastClaim.getDate());
-      const yesterday = new Date(todayStart);
-      yesterday.setDate(yesterday.getDate() - 1);
-      if (lastClaimDay.getTime() === yesterday.getTime()) {
-        newStreak = (existing.streak_days || 0) + 1;
+    let existingTotalClaims = 0;
+
+    if (cachedBonusInfo) {
+      // Use cached data — no need to re-query daily_logins
+      const streakContinues = cachedBonusInfo.lastClaimDate != null;
+      if (streakContinues && cachedBonusInfo.streakDays > 0) {
+        const lastClaim = new Date(cachedBonusInfo.lastClaimDate!);
+        const lastClaimDay = new Date(lastClaim.getFullYear(), lastClaim.getMonth(), lastClaim.getDate());
+        const yesterday = new Date(todayStart);
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (lastClaimDay.getTime() === yesterday.getTime()) {
+          newStreak = cachedBonusInfo.streakDays + 1;
+        }
+      }
+    } else {
+      // Fallback: fetch from DB if no cache
+      const { data: existing } = await supabase
+        .from('daily_logins')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (existing) {
+        const lastClaim = new Date(existing.last_claim_date);
+        const lastClaimDay = new Date(lastClaim.getFullYear(), lastClaim.getMonth(), lastClaim.getDate());
+        if (lastClaimDay.getTime() === todayStart.getTime()) {
+          return { success: false, creditsEarned: 0, newStreak: existing.streak_days || 1, totalCredits: 0 };
+        }
+        const yesterday = new Date(todayStart);
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (lastClaimDay.getTime() === yesterday.getTime()) {
+          newStreak = (existing.streak_days || 0) + 1;
+        }
+        existingTotalClaims = existing.total_claims || 0;
       }
     }
 
     const bonusAmount = calculateBonus(newStreak);
 
-    // Upsert + add credits in parallel
+    // Upsert + add credits in parallel (2 queries instead of 4)
     const [upsertResult, creditResult] = await Promise.all([
       supabase.from('daily_logins').upsert({
         user_id: userId,
         last_claim_date: now.toISOString(),
         streak_days: newStreak,
-        total_claims: (existing?.total_claims || 0) + 1,
+        total_claims: existingTotalClaims + 1,
         updated_at: now.toISOString()
       }, { onConflict: 'user_id' }),
       supabase.rpc('add_credits', { user_id: userId, amount: bonusAmount })
@@ -152,18 +169,11 @@ export async function claimDailyBonus(userId: string): Promise<ClaimResult> {
     if (upsertResult.error) throw upsertResult.error;
     if (creditResult.error) throw creditResult.error;
 
-    // Get new balance
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('credits')
-      .eq('id', userId)
-      .single();
-
     return {
       success: true,
       creditsEarned: bonusAmount,
       newStreak,
-      totalCredits: profile?.credits || 0
+      totalCredits: 0 // caller will handle credit refresh
     };
 
   } catch (error) {

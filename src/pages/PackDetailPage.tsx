@@ -22,6 +22,7 @@ import { ReportModal } from "@/components/kloze/ReportModal";
 import { WatchAdButton, getGuestCredits, setGuestCredits } from "@/components/kloze/WatchAdButton";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
+import { notifyWhatsAppTransferSuccess } from "@/components/kloze/AppReviewPrompt";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -172,6 +173,8 @@ export default function PackDetailPage() {
     // Kredi sadece başarılıysa düşülür
     if (result.success) {
       await deductCredits();
+      // Review popup trigger: ilk başarılı WhatsApp aktarımından sonra
+      notifyWhatsAppTransferSuccess();
     }
   };
 

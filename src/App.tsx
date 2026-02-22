@@ -394,8 +394,8 @@ const App = () => {
                 <DailyBonusModal userId={session.user.id} />
               )}
 
-              {/* App Review Prompt - show after some usage */}
-              {session && <AppReviewPrompt minActions={5} minDays={2} />}
+              {/* App Review Prompt - triggers after first successful WhatsApp transfer */}
+              <AppReviewPrompt />
             </div>
           </BrowserRouter>
         </TooltipProvider>

@@ -18,6 +18,8 @@ import { getTrendingStickerPacks, getNewStickerPacks, getUserLikedPackIds, toggl
 import { toast } from "sonner";
 import { getBlockedUsers } from "@/services/blockService";
 import { useAuth } from "@/contexts/AuthContext";
+import { DailyFeaturedPack } from "@/components/kloze/DailyFeaturedPack";
+import { MysteryBox } from "@/components/kloze/MysteryBox";
 
 const PACK_PAGE_SIZE = 12;
 
@@ -293,6 +295,12 @@ export default function HomePage() {
           <div className="px-4">
             {isLoading ? <HeroBannerSkeleton /> : <HeroBannerSlider />}
           </div>
+
+          {/* Günün Paketi */}
+          {!isLoading && <DailyFeaturedPack />}
+
+          {/* Sürpriz Kutu */}
+          {!isLoading && <MysteryBox />}
 
           {/* Tabs */}
           <div className="flex items-center gap-4 px-4 border-b border-border/20">
