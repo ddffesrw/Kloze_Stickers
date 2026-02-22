@@ -130,7 +130,10 @@ export default function GetCreditsPage() {
                             <Star className="w-6 h-6" />
                         </div>
                         <div>
-                            <h3 className="font-bold text-lg">Her Ay 300 Kredi</h3>
+                            <h3 className="font-bold text-lg flex items-center gap-2">
+                                <span className="text-muted-foreground line-through text-sm">150</span>
+                                <span className="text-amber-400">Her Ay 300 Kredi</span>
+                            </h3>
                             <p className="text-sm text-muted-foreground">Premium motorlarda (DALL-E) kullan</p>
                         </div>
                     </div>
@@ -142,6 +145,16 @@ export default function GetCreditsPage() {
                         <div>
                             <h3 className="font-bold text-lg">Filigransız Çıktı</h3>
                             <p className="text-sm text-muted-foreground">Stickerlarda reklam logosu olmaz</p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                        <div className="p-2.5 rounded-xl bg-purple-500/20 text-purple-400">
+                            <Percent className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-lg">Sınırsız Paket İndirme</h3>
+                            <p className="text-sm text-muted-foreground">WhatsApp'a dilediğin kadar paket aktar</p>
                         </div>
                     </div>
 
