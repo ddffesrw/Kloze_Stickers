@@ -516,32 +516,35 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Compact Credit Balance Bar */}
-        <div className="glass-card rounded-2xl p-3 border border-secondary/20 flex items-center justify-between relative overflow-hidden group">
-          <div className="absolute inset-0 bg-secondary/5 opacity-0 group-hover:opacity-10 transition-opacity" />
-
-          <div className="flex items-center gap-3 relative z-10">
-            <div className="w-10 h-10 rounded-xl bg-secondary/20 flex items-center justify-center glow-cyan">
-              <Coins className="w-5 h-5 text-secondary" />
-            </div>
-            <div className="flex flex-col leading-none gap-1">
-              <span className="text-xs text-muted-foreground font-medium">Kredi Bakiyesi</span>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-xl font-black text-foreground">{credits}</span>
-                <span className="text-[10px] text-muted-foreground opacity-70">{isPro ? 'PRO' : 'GÜNLÜK'}</span>
+        {/* Minimal PRO Banner */}
+        {!isPro && (
+          <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 p-4 bg-gradient-to-r from-amber-500/10 to-orange-500/5 flex items-center justify-between">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="flex items-center gap-3 relative z-10">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
+                <Crown className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex flex-col">
+                <h3 className="text-sm font-black bg-gradient-to-r from-amber-300 to-orange-400 bg-clip-text text-transparent">
+                  Kloze PRO'ya Geç
+                </h3>
+                <p className="text-[10px] text-muted-foreground">Limitsiz & Filigransız Üret</p>
               </div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 relative z-10">
-            <Link to="/credits">
-              <Button size="sm" className="h-9 px-4 rounded-xl gradient-secondary text-secondary-foreground font-bold text-xs shadow-lg shadow-secondary/20 hover:shadow-cyan-500/30 transition-all hover:scale-105 active:scale-95">
-                <Gift className="w-3.5 h-3.5 mr-1.5" />
-                Yükle
+            <div className="flex flex-col items-center gap-1.5 relative z-10">
+              <Button
+                size="sm"
+                onClick={() => navigate('/credits')}
+                className="h-8 px-4 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-black font-bold shadow-lg shadow-amber-500/20 hover:brightness-110 transition-all text-xs"
+              >
+                İncele
               </Button>
-            </Link>
+              <button onClick={handleRestore} className="text-[8px] text-muted-foreground underline">
+                Geri Yükle
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
 
         {/* MY PACKS */}
@@ -724,70 +727,7 @@ export default function ProfilePage() {
 
 
 
-        {/* Go Pro Banner */}
-        {!isPro && (
-          <div className="relative overflow-hidden rounded-3xl border border-amber-500/30">
-            {/* Gold gradient background */}
-            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 via-yellow-500/5 to-orange-500/10" />
-            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
 
-            <div className="relative p-6">
-              {/* Header */}
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
-                  <Crown className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black bg-gradient-to-r from-amber-300 to-orange-400 bg-clip-text text-transparent">
-                    Kloze PRO
-                  </h3>
-                  <p className="text-xs text-muted-foreground">Sınırsız sticker üretimi</p>
-                </div>
-              </div>
-
-              {/* Features */}
-              <div className="grid grid-cols-2 gap-2 mb-5">
-                <div className="flex items-center gap-2 text-xs text-zinc-300">
-                  <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                    <Check className="w-2.5 h-2.5 text-green-400" />
-                  </div>
-                  Reklamsız
-                </div>
-                <div className="flex items-center gap-2 text-xs text-zinc-300">
-                  <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                    <Check className="w-2.5 h-2.5 text-green-400" />
-                  </div>
-                  Sınırsız Üretim
-                </div>
-                <div className="flex items-center gap-2 text-xs text-zinc-300">
-                  <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                    <Check className="w-2.5 h-2.5 text-green-400" />
-                  </div>
-                  Hızlı Sunucu
-                </div>
-                <div className="flex items-center gap-2 text-xs text-zinc-300">
-                  <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                    <Check className="w-2.5 h-2.5 text-green-400" />
-                  </div>
-                  PRO Rozeti
-                </div>
-              </div>
-
-              <Button
-                onClick={() => navigate('/credits')}
-                className="w-full h-12 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 text-black text-base font-bold shadow-lg shadow-amber-500/20 hover:brightness-110 transition-all"
-              >
-                PRO'ya Geç
-              </Button>
-
-              <div className="text-center mt-3">
-                <button onClick={handleRestore} className="text-[10px] text-muted-foreground underline">
-                  Satın Alımları Geri Yükle
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Settings List */}
         <div className="space-y-3">
