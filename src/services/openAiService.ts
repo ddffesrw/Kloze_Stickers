@@ -32,10 +32,10 @@ export async function generateStickerDalle(prompt: string): Promise<{ imageURL: 
         const enhancedPrompt = prompt;
 
         const response = await client.images.generate({
-            model: "dall-e-3",
+            model: "dall-e-2",
             prompt: enhancedPrompt,
             n: 1,
-            size: "1024x1024",
+            size: "512x512",
             quality: "standard",
             response_format: "b64_json" // Prefer base64 to avoid CORS issues with blob URLs sometimes? Or URL is fine.
             // DALL-E URL expires in an hour, we must download effectively.

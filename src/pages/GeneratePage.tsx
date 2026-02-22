@@ -177,16 +177,10 @@ export default function GeneratePage() {
     // Kredi kontrolü
     let requiredCredits = 1;
     if (provider === 'runware') requiredCredits = 3;
-    if (provider === 'dalle') requiredCredits = 10;
+    if (provider === 'dalle') requiredCredits = 5;
 
-    // Pro Lock Check for DALL-E
-    if (provider === 'dalle' && !isPro) {
-      setShowBgModal(true); // Re-use BG modal or better, create a specific Pro Modal or redirect
-      // For quick implementation, let's redirect to subscription page or show toast
-      toast.info("DALL-E modeli sadece PRO üyeler içindir.");
-      navigate('/profile'); // Assuming profile has subscription options
-      return;
-    }
+    // PRO kilidini geçici olarak kaldırdım, herkes (veya admin) DALL-E 2 kullanabilsin.
+    // if (provider === 'dalle' && !isPro) { ... }
 
     if (credits < requiredCredits) {
       setPendingProvider(provider);
@@ -539,24 +533,20 @@ export default function GeneratePage() {
               disabled={isGenerating || credits === null}
               className={cn(
                 "w-full h-14 rounded-2xl border transition-all relative overflow-hidden",
-                // Pro Style vs Locked Style
-                isPro
-                  ? "bg-gradient-to-r from-purple-900 to-indigo-900 border-purple-500/30 text-white hover:from-purple-800 hover:to-indigo-800"
-                  : "bg-muted/10 border-border/30 text-muted-foreground hover:bg-muted/20"
+                // Styling changed to be unlocked
+                "bg-gradient-to-r from-purple-900 to-indigo-900 border-purple-500/30 text-white hover:from-purple-800 hover:to-indigo-800"
               )}
             >
               <div className="flex items-center justify-center gap-3">
-                <span className="text-lg">{isPro ? "👑" : "🔒"}</span>
+                <span className="text-lg">💰</span>
                 <div className="flex flex-col items-start leading-none">
-                  <span className="font-bold text-sm">Professional {isPro ? "" : "(PRO)"}</span>
-                  <span className="text-[10px] opacity-70">En İyi Kalite (DALL-E 3) • 10 Kredi</span>
+                  <span className="font-bold text-sm">OpenAI DALL-E 2</span>
+                  <span className="text-[10px] opacity-70">Standart Kalite • 5 Kredi</span>
                 </div>
               </div>
-              {!isPro && (
-                <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                  <Crown className="w-4 h-4 text-yellow-500 animate-pulse" />
-                </div>
-              )}
+              <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                <Sparkles className="w-4 h-4 text-purple-300 animate-pulse" />
+              </div>
             </Button>
 
             {/* Reset Button (If Needed) */}
