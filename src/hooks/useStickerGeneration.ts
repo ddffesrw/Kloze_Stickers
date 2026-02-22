@@ -29,7 +29,7 @@ export function useStickerGeneration(userId: string): UseStickerGenerationReturn
   const [error, setError] = useState<string | null>(null);
 
   // Tek kaynak: AuthContext
-  const { credits, refreshCredits, setCreditsLocal } = useAuth();
+  const { credits, refreshCredits, setCreditsLocal, isPro } = useAuth();
 
   const hasEnoughCredits = credits > 0;
 
@@ -67,7 +67,8 @@ export function useStickerGeneration(userId: string): UseStickerGenerationReturn
         undefined,
         removeBg,
         (prog) => setProgress(prog),
-        provider
+        provider,
+        !isPro // addWatermark
       );
 
       // Başarılı: Optimistic update with silent verification

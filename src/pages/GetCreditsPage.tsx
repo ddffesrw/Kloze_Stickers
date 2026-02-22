@@ -126,12 +126,12 @@ export default function GetCreditsPage() {
                 {/* Benefits List */}
                 <div className="grid gap-4 py-4">
                     <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                        <div className="p-2.5 rounded-xl bg-green-500/20 text-green-400">
-                            <Check className="w-6 h-6" />
+                        <div className="p-2.5 rounded-xl bg-yellow-500/20 text-yellow-400">
+                            <Star className="w-6 h-6" />
                         </div>
                         <div>
-                            <h3 className="font-bold text-lg">Reklamsız Deneyim</h3>
-                            <p className="text-sm text-muted-foreground">Kesintisiz sticker üretimi</p>
+                            <h3 className="font-bold text-lg">Her Ay 300 Kredi</h3>
+                            <p className="text-sm text-muted-foreground">Premium motorlarda (DALL-E) kullan</p>
                         </div>
                     </div>
 
@@ -140,18 +140,18 @@ export default function GetCreditsPage() {
                             <Sparkles className="w-6 h-6" />
                         </div>
                         <div>
-                            <h3 className="font-bold text-lg">Hızlı Üretim</h3>
-                            <p className="text-sm text-muted-foreground">Öncelikli sunucu erişimi</p>
+                            <h3 className="font-bold text-lg">Filigransız Çıktı</h3>
+                            <p className="text-sm text-muted-foreground">Stickerlarda reklam logosu olmaz</p>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                        <div className="p-2.5 rounded-xl bg-purple-500/20 text-purple-400">
-                            <Crown className="w-6 h-6" />
+                        <div className="p-2.5 rounded-xl bg-green-500/20 text-green-400">
+                            <Check className="w-6 h-6" />
                         </div>
                         <div>
-                            <h3 className="font-bold text-lg">Özel Rozet</h3>
-                            <p className="text-sm text-muted-foreground">Profilinde PRO rozeti</p>
+                            <h3 className="font-bold text-lg">Reklamsız Deneyim</h3>
+                            <p className="text-sm text-muted-foreground">Kesintisiz ve hızlı sticker üretimi</p>
                         </div>
                     </div>
                 </div>

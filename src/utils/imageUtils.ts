@@ -111,7 +111,7 @@ export async function createThumbnail(blob: Blob): Promise<Blob> {
  * WhatsApp standardı için STRICT size limits
  * Animated WebP'leri korur (canvas render etmez)
  */
-export async function convertToWebP(blob: Blob): Promise<Blob> {
+export async function convertToWebP(blob: Blob, addWatermark: boolean = false): Promise<Blob> {
     // Check if already animated WebP - preserve it!
     const isAnimated = await isWebPAnimated(blob);
 
@@ -151,6 +151,22 @@ export async function convertToWebP(blob: Blob): Promise<Blob> {
 
             ctx.clearRect(0, 0, 512, 512);
             ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+
+            if (addWatermark) {
+                // Draw a subtle watermark at the bottom right
+                ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+                ctx.font = "bold 20px Arial";
+                ctx.textAlign = "right";
+                // Add a small dark shadow to make it readable on light and dark stickers
+                ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 1;
+                ctx.fillText("Kloze", 500, 500);
+
+                // Reset shadow for further operations if needed
+                ctx.shadowColor = "transparent";
+            }
 
             // Strict 100KB Limit Loop (static only)
             let quality = 0.9;

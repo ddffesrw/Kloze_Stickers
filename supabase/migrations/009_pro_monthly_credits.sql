@@ -29,7 +29,7 @@ DECLARE
   v_user_id UUID;
   v_is_pro BOOLEAN;
   v_last_given TIMESTAMPTZ;
-  v_monthly_amount INTEGER := 150;
+  v_monthly_amount INTEGER := 300;
 BEGIN
   -- Get current user
   v_user_id := auth.uid();

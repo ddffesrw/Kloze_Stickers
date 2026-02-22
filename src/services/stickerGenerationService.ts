@@ -35,7 +35,8 @@ export async function generateAndUploadSticker(
   options?: Partial<GenerateStickerOptions>,
   removeBg: boolean = true,
   onProgress?: (progress: GenerationProgress) => void,
-  provider: 'runware' | 'huggingface' | 'dalle' = 'runware'
+  provider: 'runware' | 'huggingface' | 'dalle' = 'runware',
+  addWatermark: boolean = false
 ): Promise<GeneratedStickerResult> {
   try {
     // 0. Kredi Kontrolü (RPC ile - RLS Bypass)
@@ -56,154 +57,154 @@ export async function generateAndUploadSticker(
     // Kredi düşülmüyor henüz - tüm pipeline başarılı olduktan SONRA düşülecek
 
     try {
-    // 1. AI ile görsel üret
-    onProgress?.({
-      stage: 'generating',
-      progress: 10,
-      message: provider === 'huggingface' ? 'Ücretsiz sunucuda üretiliyor...' : 'Yüksek kalite üretiliyor...'
-    });
-
-    let generated;
-    if (provider === 'dalle') {
-      generated = await generateStickerDalle(prompt);
-    } else {
-      // Default / Runware
-      generated = await generateSticker({
-        prompt,
-        ...options
-      });
-    }
-
-    onProgress?.({
-      stage: 'generating',
-      progress: 30,
-      message: 'Görsel üretildi!'
-    });
-
-
-    // 2. Arka planı sil
-    let transparentBlob: Blob;
-
-    if (removeBg) {
+      // 1. AI ile görsel üret
       onProgress?.({
-        stage: 'removing_bg',
-        progress: 40,
-        message: 'Arka plan siliniyor...'
+        stage: 'generating',
+        progress: 10,
+        message: provider === 'huggingface' ? 'Ücretsiz sunucuda üretiliyor...' : 'Yüksek kalite üretiliyor...'
       });
 
-      try {
-        // Always use local @imgly BG removal (free, runs in browser via WASM)
-        // Runware's server-side BG removal costs extra API credits - unnecessary
-        console.log('[Generation] Using local @imgly BG removal...');
-        transparentBlob = await removeBackgroundWithRetry(generated.imageURL);
+      let generated;
+      if (provider === 'dalle') {
+        generated = await generateStickerDalle(prompt);
+      } else {
+        // Default / Runware
+        generated = await generateSticker({
+          prompt,
+          ...options
+        });
+      }
 
+      onProgress?.({
+        stage: 'generating',
+        progress: 30,
+        message: 'Görsel üretildi!'
+      });
+
+
+      // 2. Arka planı sil
+      let transparentBlob: Blob;
+
+      if (removeBg) {
         onProgress?.({
           stage: 'removing_bg',
-          progress: 60,
-          message: 'Arka plan silindi!'
+          progress: 40,
+          message: 'Arka plan siliniyor...'
         });
 
-      } catch (bgError) {
-        console.error("BG removal failed, falling back to original...", bgError);
+        try {
+          // Always use local @imgly BG removal (free, runs in browser via WASM)
+          // Runware's server-side BG removal costs extra API credits - unnecessary
+          console.log('[Generation] Using local @imgly BG removal...');
+          transparentBlob = await removeBackgroundWithRetry(generated.imageURL);
 
-        // FALLBACK: Use original image so user doesn't lose credit/sticker
+          onProgress?.({
+            stage: 'removing_bg',
+            progress: 60,
+            message: 'Arka plan silindi!'
+          });
+
+        } catch (bgError) {
+          console.error("BG removal failed, falling back to original...", bgError);
+
+          // FALLBACK: Use original image so user doesn't lose credit/sticker
+          onProgress?.({
+            stage: 'removing_bg',
+            progress: 60,
+            message: 'Arka plan silinemedi, orijinali kullanılıyor...'
+          });
+
+          const response = await fetch(generated.imageURL);
+          transparentBlob = await response.blob();
+        }
+      } else {
+        // Skip removal, fetch original image as blob if needed
         onProgress?.({
           stage: 'removing_bg',
-          progress: 60,
-          message: 'Arka plan silinemedi, orijinali kullanılıyor...'
+          progress: 50,
+          message: 'Arka plan silme atlanıyor...'
         });
 
         const response = await fetch(generated.imageURL);
         transparentBlob = await response.blob();
       }
-    } else {
-      // Skip removal, fetch original image as blob if needed
+
+      // 3. WebP formatına çevir (512x512)
       onProgress?.({
-        stage: 'removing_bg',
-        progress: 50,
-        message: 'Arka plan silme atlanıyor...'
+        stage: 'converting',
+        progress: 70,
+        message: 'WebP formatına çevriliyor...'
       });
 
-      const response = await fetch(generated.imageURL);
-      transparentBlob = await response.blob();
-    }
+      const webpBlob = await convertToWebP(transparentBlob, addWatermark);
 
-    // 3. WebP formatına çevir (512x512)
-    onProgress?.({
-      stage: 'converting',
-      progress: 70,
-      message: 'WebP formatına çevriliyor...'
-    });
+      // Check if animated (after conversion - if animated, convertToWebP preserves it)
+      const isAnimated = await isWebPAnimated(webpBlob);
 
-    const webpBlob = await convertToWebP(transparentBlob);
+      // 4. Thumbnail oluştur
+      const thumbnailBlob = await createThumbnail(transparentBlob);
 
-    // Check if animated (after conversion - if animated, convertToWebP preserves it)
-    const isAnimated = await isWebPAnimated(webpBlob);
+      onProgress?.({
+        stage: 'converting',
+        progress: 80,
+        message: 'Format dönüşümü tamamlandı!'
+      });
 
-    // 4. Thumbnail oluştur
-    const thumbnailBlob = await createThumbnail(transparentBlob);
+      // 5. Supabase'e yükle
+      onProgress?.({
+        stage: 'uploading',
+        progress: 85,
+        message: 'Supabase\'e yükleniyor...'
+      });
 
-    onProgress?.({
-      stage: 'converting',
-      progress: 80,
-      message: 'Format dönüşümü tamamlandı!'
-    });
+      // Parallel upload
+      const uploadPromises = [
+        storageService.upload(BUCKETS.STICKERS, `${userId}/${Date.now()}_sticker.webp`, webpBlob),
+        storageService.upload(BUCKETS.THUMBNAILS, `${userId}/${Date.now()}_thumb.webp`, thumbnailBlob)
+      ];
 
-    // 5. Supabase'e yükle
-    onProgress?.({
-      stage: 'uploading',
-      progress: 85,
-      message: 'Supabase\'e yükleniyor...'
-    });
+      const [stickerUpload, thumbUpload] = await Promise.all(uploadPromises);
+      const imageUrl = stickerUpload.publicUrl;
+      const thumbnailUrl = thumbUpload.publicUrl;
 
-    // Parallel upload
-    const uploadPromises = [
-      storageService.upload(BUCKETS.STICKERS, `${userId}/${Date.now()}_sticker.webp`, webpBlob),
-      storageService.upload(BUCKETS.THUMBNAILS, `${userId}/${Date.now()}_thumb.webp`, thumbnailBlob)
-    ];
+      onProgress?.({
+        stage: 'complete',
+        progress: 100,
+        message: 'Sticker hazır!'
+      });
 
-    const [stickerUpload, thumbUpload] = await Promise.all(uploadPromises);
-    const imageUrl = stickerUpload.publicUrl;
-    const thumbnailUrl = thumbUpload.publicUrl;
+      // 6. Veritabanına kaydet
+      const stickerId = crypto.randomUUID();
 
-    onProgress?.({
-      stage: 'complete',
-      progress: 100,
-      message: 'Sticker hazır!'
-    });
+      await supabase.from('user_stickers').insert({
+        id: stickerId,
+        user_id: userId,
+        image_url: imageUrl,
+        thumbnail_url: thumbnailUrl,
+        prompt,
+        seed: generated.seed,
+        width: 512,
+        height: 512,
+        size_bytes: webpBlob.size,
+        is_animated: isAnimated // Track if animated
+      });
 
-    // 6. Veritabanına kaydet
-    const stickerId = crypto.randomUUID();
-
-    await supabase.from('user_stickers').insert({
-      id: stickerId,
-      user_id: userId,
-      image_url: imageUrl,
-      thumbnail_url: thumbnailUrl,
-      prompt,
-      seed: generated.seed,
-      width: 512,
-      height: 512,
-      size_bytes: webpBlob.size,
-      is_animated: isAnimated // Track if animated
-    });
-
-    // Pipeline tamamen başarılı - şimdi krediyi düş
-    if (requiredCredits > 0) {
-      const { error: deductError } = await supabase.rpc('deduct_credits', { amount: requiredCredits });
-      if (deductError) {
-        console.error('[Generation] Credit deduction failed after success:', deductError);
+      // Pipeline tamamen başarılı - şimdi krediyi düş
+      if (requiredCredits > 0) {
+        const { error: deductError } = await supabase.rpc('deduct_credits', { amount: requiredCredits });
+        if (deductError) {
+          console.error('[Generation] Credit deduction failed after success:', deductError);
+        }
       }
-    }
 
-    return {
-      id: stickerId,
-      imageUrl,
-      thumbnailUrl,
-      seed: generated.seed,
-      width: 512,
-      height: 512
-    };
+      return {
+        id: stickerId,
+        imageUrl,
+        thumbnailUrl,
+        seed: generated.seed,
+        width: 512,
+        height: 512
+      };
 
     } catch (pipelineError) {
       // Pipeline failed - no credit was deducted, nothing to refund
@@ -234,7 +235,8 @@ export async function generateMultipleStickers(
         undefined,
         true, // Batch default removeBg=true for now
         (progress) => onProgress?.(i + 1, prompts.length, progress),
-        'runware' // Batch şimdilik sadece Runware
+        'runware', // Batch şimdilik sadece Runware
+        false // Default addWatermark false for batch for now
       );
 
       results.push(result);
